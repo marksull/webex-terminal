@@ -22,6 +22,7 @@ class WebexWebsocket:
         self.running = False
         self.message_callback = None
         self.current_room_id = None
+        self.message_loop_task = None
 
     async def _register_device(self) -> Dict:
         """Register a device with Webex to receive websocket events."""
@@ -59,6 +60,14 @@ class WebexWebsocket:
 
     async def connect(self):
         """Connect to the Webex websocket."""
+        # Cancel any existing message loop task
+        if self.message_loop_task and not self.message_loop_task.done():
+            self.message_loop_task.cancel()
+            try:
+                await self.message_loop_task
+            except asyncio.CancelledError:
+                pass
+
         # Get the websocket URL
         websocket_url = await self._get_websocket_url()
 
@@ -67,18 +76,34 @@ class WebexWebsocket:
         self.running = True
 
         # Start the message handling loop
-        asyncio.create_task(self._message_loop())
+        self.message_loop_task = asyncio.create_task(self._message_loop())
 
     async def disconnect(self):
         """Disconnect from the Webex websocket."""
         self.running = False
+
+        # Cancel the message loop task
+        if self.message_loop_task and not self.message_loop_task.done():
+            self.message_loop_task.cancel()
+            try:
+                await self.message_loop_task
+            except asyncio.CancelledError:
+                pass
+            self.message_loop_task = None
+
+        # Close the websocket connection
         if self.websocket:
             await self.websocket.close()
             self.websocket = None
 
     async def _message_loop(self):
         """Handle incoming websocket messages."""
-        while self.running and self.websocket:
+        while self.running:
+            if not self.websocket:
+                # If no websocket connection, wait and try again
+                await asyncio.sleep(1)
+                continue
+
             try:
                 # Wait for a message
                 message = await self.websocket.recv()
@@ -90,8 +115,17 @@ class WebexWebsocket:
                 await self._handle_message(data)
 
             except websockets.exceptions.ConnectionClosed:
-                # Reconnect if the connection is closed
-                await self.connect()
+                # Connection closed, try to reconnect without starting a new message loop
+                try:
+                    # Get the websocket URL
+                    websocket_url = await self._get_websocket_url()
+
+                    # Reconnect to the websocket
+                    self.websocket = await websockets.connect(websocket_url)
+                except Exception as e:
+                    print(f"Error reconnecting to websocket: {e}")
+                    self.websocket = None
+                    await asyncio.sleep(1)
 
             except Exception as e:
                 print(f"Error in websocket message loop: {e}")
