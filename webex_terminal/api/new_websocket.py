@@ -290,8 +290,13 @@ class WebexWebsocket:
                 print(f"Message ID from activity: {message_id}")
 
                 # Try different locations for the room ID
-                room_id = activity.get('target', {}).get('id')
-                print(f"Room ID from target: {room_id}")
+                room_id = activity.get('target', {}).get('globalId')
+                print(f"Room ID from target globalId: {room_id}")
+
+                if not room_id:
+                    # Fallback to target.id if globalId is not available
+                    room_id = activity.get('target', {}).get('id')
+                    print(f"Room ID from target id: {room_id}")
 
                 if not room_id:
                     # Try to get room ID from the 'object' field if available

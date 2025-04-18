@@ -181,10 +181,11 @@ async def room_session(room):
     websocket = await create_websocket_client()
     print("Websocket client created and connected successfully")
 
-    # Set the current room
-    print(f"Setting current room to: {room['id']}")
-    websocket.set_room(room['id'])
-    print(f"Current room set to: {room['id']}")
+    # Set the current room - prefer globalId if available, otherwise use id
+    room_id = room.get('globalId', room['id'])
+    print(f"Setting current room to: {room_id}")
+    websocket.set_room(room_id)
+    print(f"Current room set to: {room_id}")
 
     # Get user info
     print("Getting user info...")
