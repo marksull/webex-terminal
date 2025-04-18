@@ -11,6 +11,8 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit import print_formatted_text
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
@@ -164,12 +166,33 @@ async def room_session(room):
     # Get user info
     me = client.get_me()
 
-    # Create prompt session
-    session = PromptSession()
+    # Create custom key bindings
+    kb = KeyBindings()
+
+    # Make Enter add a new line, but submit if it's a command
+    @kb.add('enter')
+    def _(event):
+        buffer = event.current_buffer
+        text = buffer.text
+
+        # If the input starts with '/', treat it as a command and submit
+        if text.startswith('/'):
+            buffer.validate_and_handle()
+        else:
+            # Otherwise, add a new line
+            buffer.newline()
+
+    # Make Escape followed by Enter submit the input
+    @kb.add('escape', 'enter')
+    def _(event):
+        event.current_buffer.validate_and_handle()
+
+    # Create prompt session with multiline support and custom key bindings
+    session = PromptSession(multiline=True, key_bindings=kb)
 
     # Print welcome message
     print(f"\nJoined room: {room['title']}")
-    print("Type a message and press Enter to send. Type /help for available commands.")
+    print("Type a message and press Enter to add a new line. Press Escape followed by Enter to send. Type /help for available commands.")
 
     # Create an event to signal when to exit the room
     exit_event = asyncio.Event()
