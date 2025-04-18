@@ -10,6 +10,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit import print_formatted_text
 
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
@@ -194,7 +195,10 @@ async def room_session(room):
             await asyncio.sleep(0)
 
             with patch_stdout():
-                print(HTML(f"\n<username>{sender_name}</username>: <message>{message_text}</message>"))
+                # Format message with sender name as prefix, keeping the styling
+                print_formatted_text(HTML(f"\n<username>{sender_name}</username>: <message>{message_text}</message>"), style=style)
+                # Redisplay the prompt after the message
+                print_formatted_text(HTML(f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "), style=style, end='')
 
             # Yield control back to the event loop after displaying the message
             await asyncio.sleep(0)
