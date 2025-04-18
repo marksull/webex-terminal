@@ -13,7 +13,7 @@ from prompt_toolkit.formatted_text import HTML
 
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
-from webex_terminal.api.websocket import WebexWebsocket, create_websocket_client
+from webex_terminal.api.new_websocket import WebexWebsocket, create_websocket_client
 
 
 # Prompt toolkit style
