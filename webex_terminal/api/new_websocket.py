@@ -90,7 +90,7 @@ class WebexWebsocket:
             # Get the device info
             device_info = await self._get_device_info()
             websocket_url = device_info.get('webSocketUrl')
-
+            
             if not websocket_url:
                 raise ValueError("No websocket URL found in device info")
 
@@ -98,7 +98,7 @@ class WebexWebsocket:
             self.running = True
             self.message_loop_task = asyncio.create_task(self._message_loop())
             print("Message loop task started")
-
+            
             return True
         except Exception as e:
             print(f"Error connecting to websocket: {e}")
@@ -108,7 +108,7 @@ class WebexWebsocket:
     async def _cleanup_resources(self):
         """Clean up any existing resources."""
         print("Cleaning up resources...")
-
+        
         # Cancel any existing message loop task
         if self.message_loop_task and not self.message_loop_task.done():
             print("Cancelling existing message loop task...")
@@ -137,66 +137,66 @@ class WebexWebsocket:
     async def disconnect(self):
         """Disconnect from the Webex websocket."""
         print("Disconnecting from Webex websocket...")
-
+        
         # Set running to False first to signal tasks to stop
         self.running = False
         print("Set running flag to False")
-
+        
         # Clean up resources
         await self._cleanup_resources()
-
+        
         print("Disconnected from Webex websocket")
 
     async def _message_loop(self):
         """Handle incoming websocket messages using a simpler approach based on the reference implementation."""
         print("Starting message loop...")
-
+        
         try:
             while self.running:
                 try:
                     # Get the device info and websocket URL
                     device_info = await self._get_device_info()
                     websocket_url = device_info.get('webSocketUrl')
-
+                    
                     if not websocket_url:
                         print("No websocket URL found, waiting to retry...")
                         await asyncio.sleep(5)
                         continue
-
+                    
                     print(f"Opening websocket connection to {websocket_url}")
-
+                    
                     # Connect to the websocket
                     async with websockets.connect(websocket_url) as ws:
                         self.websocket = ws
                         print("WebSocket opened successfully")
-
+                        
                         # Send authorization message
                         token_data = get_token()
                         if not token_data:
                             print("No token data found, cannot authorize")
                             await asyncio.sleep(5)
                             continue
-
+                        
                         auth_msg = {
                             "id": str(uuid.uuid4()),
                             "type": "authorization",
                             "data": {"token": "Bearer " + token_data['access_token']}
                         }
-
+                        
                         print("Sending authorization message...")
                         await ws.send(json.dumps(auth_msg))
                         print("Authorization message sent")
-
+                        
                         # Reset reconnection count on successful connection
                         self.reset_reconnection_count()
-
+                        
                         # Process messages
                         while self.running:
                             try:
                                 print("Waiting for websocket message...")
                                 message = await ws.recv()
                                 print(f"Received websocket message: {message[:100]}...")  # Print first 100 chars
-
+                                
                                 # Process the message in the current task
                                 await self._process_message(message)
                             except websockets.exceptions.ConnectionClosed as e:
@@ -208,34 +208,34 @@ class WebexWebsocket:
                             except Exception as e:
                                 print(f"Error processing message: {e}")
                                 # Continue to next message
-
+                
                 except asyncio.CancelledError:
                     print("Message loop cancelled, exiting")
                     raise
                 except Exception as e:
                     print(f"Error in websocket connection: {e}")
-
+                    
                     # Increment reconnection count
                     self.reconnection_count += 1
                     print(f"Reconnection attempt {self.reconnection_count}/{self.max_reconnection_count}")
-
+                    
                     if self.reconnection_count >= self.max_reconnection_count:
                         print(f"Maximum reconnection attempts ({self.max_reconnection_count}) reached, giving up")
                         break
-
+                    
                     # Wait before retrying
                     retry_delay = min(30, 2 ** self.reconnection_count)
                     print(f"Waiting {retry_delay} seconds before reconnecting...")
-
+                    
                     try:
                         await asyncio.sleep(retry_delay)
                     except asyncio.CancelledError:
                         print("Reconnection sleep cancelled")
                         raise
-
+                
                 # Clear websocket reference
                 self.websocket = None
-
+        
         except asyncio.CancelledError:
             print("Message loop task cancelled, exiting gracefully")
             raise
@@ -253,7 +253,7 @@ class WebexWebsocket:
             print("Parsing message...")
             data = json.loads(message_str)
             print(f"Message parsed successfully. Data type: {type(data)}, Keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
-
+            
             # Handle the message
             await self._handle_message(data)
         except Exception as e:
@@ -263,35 +263,35 @@ class WebexWebsocket:
         """Handle a websocket message."""
         # Debug: Print the received data structure
         print(f"Received websocket data: {json.dumps(data, indent=2)}")
-
+        
         # Check if this is an activity event
         event_type = data.get('data', {}).get('eventType')
         print(f"Event type: {event_type}")
-
+        
         if event_type == 'conversation.activity':
             activity = data['data']['activity']
             print(f"Activity received: {json.dumps(activity, indent=2)}")
-
+            
             # Check if this is a message event - accept both 'post' and 'share' verbs
             verb = activity.get('verb')
             print(f"Verb: {verb}, Has message_callback: {self.message_callback is not None}")
-
+            
             if verb in ['post', 'share'] and self.message_callback:
                 # Get the message details - try different locations for the message ID
                 message_id = activity.get('id') or activity.get('object', {}).get('id')
                 print(f"Message ID from activity: {message_id}")
-
+                
                 # Try different locations for the room ID
                 room_id = activity.get('target', {}).get('id')
                 print(f"Room ID from target: {room_id}")
-
+                
                 if not room_id:
                     # Try to get room ID from the 'object' field if available
                     room_id = activity.get('object', {}).get('roomId')
                     print(f"Room ID from object: {room_id}")
-
+                
                 print(f"Message event detected - ID: {message_id}, Room: {room_id}, Current room: {self.current_room_id}")
-
+                
                 # Only process messages for the current room and if we have a valid message ID
                 if room_id == self.current_room_id and message_id:
                     print(f"Processing message for current room: {room_id}")
@@ -300,12 +300,12 @@ class WebexWebsocket:
                         print(f"Getting message details for ID: {message_id}")
                         message = self.client.get_message(message_id)
                         print(f"Retrieved message: {json.dumps(message, indent=2)}")
-
+                        
                         # Call the callback with the message
                         print(f"Calling message_callback with message: {message.get('text', '')}")
                         await self.message_callback(message)
                         print("Message callback completed")
-
+                        
                     except WebexAPIError as e:
                         print(f"Error getting message details: {e}")
                 elif not message_id:
@@ -331,20 +331,20 @@ async def create_websocket_client() -> WebexWebsocket:
     print("Creating websocket client...")
     client = WebexWebsocket()
     print("Websocket client created, connecting...")
-
+    
     try:
         # Yield control back to the event loop before connecting
         await asyncio.sleep(0)
-
+        
         success = await client.connect()
         if not success:
             raise Exception("Failed to connect to Webex websocket")
-
+        
         print("Websocket client connected successfully")
-
+        
         # Yield control back to the event loop after connecting
         await asyncio.sleep(0)
-
+        
         return client
     except Exception as e:
         print(f"Error creating websocket client: {e}")
