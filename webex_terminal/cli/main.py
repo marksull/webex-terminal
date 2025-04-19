@@ -276,11 +276,41 @@ async def room_session(room):
                         print("  /help - Show this help message")
                         print("  /list - List all rooms")
                         print("  /join <room_id> - Join another room")
+                        print("  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)")
                     elif command == 'list':
                         rooms = client.list_rooms()
                         print("\nAvailable rooms:")
                         for i, r in enumerate(rooms, 1):
                             print(f"{i}. {r['title']} (ID: {r['id']})")
+                    elif command.isdigit() and 1 <= int(command) <= 10:
+                        # Retrieve and display the last n messages in the room
+                        num_messages = int(command)
+                        try:
+                            messages = client.list_messages(room['id'], max_results=num_messages)
+                            if not messages:
+                                print("\nNo messages found in this room.")
+                            else:
+                                print(f"\nLast {num_messages} messages:")
+                                # Messages are returned in reverse chronological order (newest first)
+                                # Display them in chronological order (oldest first)
+                                for message in reversed(messages):
+                                    # Skip messages without text
+                                    if 'text' not in message:
+                                        continue
+
+                                    # Get sender info
+                                    try:
+                                        sender = client.get_person(message['personId'])
+                                        sender_name = sender.get('displayName', 'Unknown')
+                                    except Exception:
+                                        sender_name = 'Unknown'
+
+                                    # Format and print the message
+                                    message_text = message.get('text', '')
+                                    with patch_stdout():
+                                        print_formatted_text(HTML(f"<username>{sender_name}</username>: <message>{message_text}</message>"), style=style)
+                        except WebexAPIError as e:
+                            print(f"Error retrieving messages: {e}")
                     elif command.startswith('join '):
                         # Exit current room and join new one
                         new_room_id = command[5:].strip()
