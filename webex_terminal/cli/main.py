@@ -6,6 +6,8 @@ import sys
 import json
 import asyncio
 import click
+import markdown
+import html
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
@@ -349,11 +351,25 @@ async def room_session(room):
             # Yield control back to the event loop before displaying the message
             await asyncio.sleep(0)
 
+            # Convert markdown to HTML if markdown content is available
+            if message.get("markdown"):
+                # Escape any HTML in the original message to prevent injection
+                safe_text = html.escape(message_text)
+                # Convert markdown to HTML
+                html_content = markdown.markdown(safe_text)
+                # Remove surrounding <p> tags if they exist
+                html_content = html_content.strip()
+                if html_content.startswith("<p>") and html_content.endswith("</p>"):
+                    html_content = html_content[3:-4]
+            else:
+                # If no markdown, just escape the text
+                html_content = html.escape(message_text)
+
             with patch_stdout():
                 # Format message with sender name as prefix, keeping the styling
                 print_formatted_text(
                     HTML(
-                        f"\n<username>{sender_name}</username>: <message>{message_text}</message>"
+                        f"\n<username>{sender_name}</username>: <message>{html_content}</message>"
                     ),
                     style=style,
                 )

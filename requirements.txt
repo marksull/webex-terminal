@@ -3,3 +3,5 @@ websockets>=10.0
 prompt_toolkit>=3.0.0
 pyyaml>=5.1
 click>=8.0.0
+markdown<3.3.0
+importlib-metadata<5.0.0
