@@ -155,30 +155,35 @@ class WebexClient:
             result = {}
 
             # Get filename from Content-Disposition header
-            content_disposition = response.headers.get('Content-Disposition', '')
-            if 'filename=' in content_disposition:
+            content_disposition = response.headers.get("Content-Disposition", "")
+            if "filename=" in content_disposition:
                 # Extract filename from Content-Disposition header
                 # Format is typically: attachment; filename="example.pdf"
                 import re
-                filename_match = re.search(r'filename=["\']?([^"\';\n]+)["\']?', content_disposition)
+
+                filename_match = re.search(
+                    r'filename=["\']?([^"\';\n]+)["\']?', content_disposition
+                )
                 if filename_match:
-                    result['name'] = filename_match.group(1)
+                    result["name"] = filename_match.group(1)
 
             # Get content type
-            content_type = response.headers.get('Content-Type', '')
+            content_type = response.headers.get("Content-Type", "")
             if content_type:
-                result['contentType'] = content_type
+                result["contentType"] = content_type
 
             # Get content length (file size)
-            content_length = response.headers.get('Content-Length', '')
+            content_length = response.headers.get("Content-Length", "")
             if content_length and content_length.isdigit():
-                result['size'] = int(content_length)
+                result["size"] = int(content_length)
 
             # Add all other headers that might be useful
             for header, value in response.headers.items():
                 # Convert header names to camelCase to match Webex API convention
-                header_parts = header.split('-')
-                camel_case_header = header_parts[0].lower() + ''.join(part.capitalize() for part in header_parts[1:])
+                header_parts = header.split("-")
+                camel_case_header = header_parts[0].lower() + "".join(
+                    part.capitalize() for part in header_parts[1:]
+                )
 
                 # Add header to result if not already added
                 if camel_case_header not in result:
@@ -735,27 +740,6 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request or if the file doesn't exist.
         """
-        # The file_id in the URL might be base64 encoded and needs to be properly formatted
-        # Try to decode if it's base64 encoded
-        import base64
-        import re
-
-        # Check if the file_id looks like a base64 encoded string
-        # Base64 strings typically contain only alphanumeric characters, +, /, and =
-        if re.match(r'^[A-Za-z0-9+/=]+$', file_id):
-            try:
-                # Try to decode the file_id
-                decoded_id = base64.b64decode(file_id).decode('utf-8')
-
-                # If the decoded ID contains a URL or path, extract the relevant part
-                if '/' in decoded_id:
-                    parts = decoded_id.split('/')
-                    # The last part is usually the actual ID
-                    file_id = parts[-1]
-            except Exception:
-                # If decoding fails, use the original file_id
-                pass
-
         # Use a HEAD request to get file details from headers
         # According to Webex API documentation, this is the recommended way to get file details
         try:
@@ -764,7 +748,7 @@ class WebexClient:
 
             # If we got file details, add the download URL
             if file_details:
-                file_details['downloadUrl'] = f"{self.base_url}/contents/{file_id}"
+                file_details["downloadUrl"] = f"{self.base_url}/contents/{file_id}"
 
             return file_details
         except WebexAPIError as e:

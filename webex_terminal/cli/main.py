@@ -8,6 +8,7 @@ import asyncio
 import click
 import markdown
 import html
+import shutil
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
@@ -666,11 +667,25 @@ async def room_session(room):
                                 try:
                                     from texttable import Texttable
 
+                                    # Get terminal width
+                                    terminal_width = shutil.get_terminal_size().columns
+
+                                    # Calculate column widths based on terminal width
+                                    # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
+                                    # Ensure minimum width of 80 characters to avoid errors on very small terminals
+                                    effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+
+                                    filename_width = int(effective_width * 0.30)
+                                    type_width = int(effective_width * 0.15)
+                                    size_width = int(effective_width * 0.10)
+                                    created_width = int(effective_width * 0.15)
+                                    id_width = effective_width - filename_width - type_width - size_width - created_width
+
                                     # Create a table
-                                    table = Texttable()
+                                    table = Texttable(max_width=terminal_width)
                                     table.set_deco(Texttable.HEADER)
                                     table.set_cols_align(["l", "l", "l", "l", "l"])
-                                    table.set_cols_width([30, 15, 10, 15, 10])
+                                    table.set_cols_width([filename_width, type_width, size_width, created_width, id_width])
 
                                     # Add header row
                                     table.add_row(["Filename", "Type", "Size", "Created", "ID"])
@@ -723,14 +738,30 @@ async def room_session(room):
                                     )
                                 except ImportError:
                                     # If texttable is not available, use simple formatting
+                                    # Get terminal width
+                                    terminal_width = shutil.get_terminal_size().columns
+
+                                    # Calculate column widths based on terminal width
+                                    # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
+                                    # Ensure minimum width of 80 characters to avoid errors on very small terminals
+                                    effective_width = max(terminal_width, 80)
+
+                                    filename_width = int(effective_width * 0.30)
+                                    type_width = int(effective_width * 0.15)
+                                    size_width = int(effective_width * 0.10)
+                                    created_width = int(effective_width * 0.15)
+                                    id_width = effective_width - filename_width - type_width - size_width - created_width
+
                                     print(f"\nFiles in room '{room['title']}':")
-                                    print("--------------------")
-                                    print(
-                                        "Filename                          Type        Size        Created         ID"
-                                    )
-                                    print(
-                                        "--------------------              --------    --------    ------------    --------------------"
-                                    )
+                                    print("-" * terminal_width)
+
+                                    # Create header format string with dynamic widths
+                                    header_format = f"{{:<{filename_width}}} {{:<{type_width}}} {{:<{size_width}}} {{:<{created_width}}} {{:<{id_width}}}"
+                                    print(header_format.format("Filename", "Type", "Size", "Created", "ID"))
+
+                                    # Create separator line with dynamic widths
+                                    separator_format = f"{{:-<{filename_width}}} {{:-<{type_width}}} {{:-<{size_width}}} {{:-<{created_width}}} {{:-<{id_width}}}"
+                                    print(separator_format.format("", "", "", "", ""))
                                     for file_info in files:
                                         # Get file details
                                         file_id = file_info.get("id", "")
@@ -767,9 +798,9 @@ async def room_session(room):
                                             # Just take the date part (first 10 characters)
                                             created = created[:10]
 
-                                        # Print file info
+                                        # Print file info using the dynamic format
                                         print(
-                                            f"  {filename:<30} {content_type:<10} {size_str:<10} {created:<12} {file_id}"
+                                            header_format.format(filename, content_type, size_str, created, file_id)
                                         )
                                     print(
                                         "\nUse /download <filename> to download a file. You can use either the filename or the ID."
