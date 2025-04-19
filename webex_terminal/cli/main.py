@@ -31,13 +31,29 @@ style = Style.from_dict(
 
 @click.group()
 def cli():
-    """Webex Terminal - A terminal client for Cisco Webex."""
+    """Webex Terminal - A terminal client for Cisco Webex.
+
+    This function serves as the main command group for the CLI application.
+    All subcommands are attached to this group.
+    """
     pass
 
 
 @cli.command()
 def auth():
-    """Authenticate with Webex."""
+    """Authenticate with Webex.
+
+    This function handles the authentication process with Webex.
+    It checks for existing authentication, retrieves client credentials
+    from environment variables, and initiates the authentication flow.
+
+    Environment variables required:
+        WEBEX_CLIENT_ID: The client ID from Webex Developer Portal
+        WEBEX_CLIENT_SECRET: The client secret from Webex Developer Portal
+
+    Returns:
+        None
+    """
     # Check if already authenticated
     if is_authenticated():
         click.echo("Already authenticated. Use 'logout' to clear credentials.")
@@ -69,14 +85,32 @@ def auth():
 
 @cli.command()
 def logout():
-    """Log out from Webex."""
+    """Log out from Webex.
+
+    This function clears the stored authentication credentials,
+    effectively logging the user out of Webex.
+
+    Returns:
+        None
+    """
     logout()
     click.echo("Logged out successfully.")
 
 
 @cli.command()
 def list_rooms():
-    """List available Webex rooms."""
+    """List available Webex rooms.
+
+    This function retrieves and displays all Webex rooms that the
+    authenticated user has access to. It requires authentication
+    before it can be used.
+
+    Returns:
+        None
+
+    Raises:
+        SystemExit: If the user is not authenticated or if there's an API error
+    """
     # Check if authenticated
     if not is_authenticated():
         click.echo("Not authenticated. Please run 'webex-terminal auth' first.")
@@ -107,7 +141,23 @@ def list_rooms():
 @click.argument("room_id", required=False)
 @click.option("--name", "-n", help="Room name to join")
 def join_room(room_id, name):
-    """Join a Webex room by ID or name."""
+    """Join a Webex room by ID or name.
+
+    This function allows the user to join a specific Webex room either by its ID
+    or by its name. If neither room_id nor name is provided, it displays a list
+    of available rooms and prompts the user to select one.
+
+    Args:
+        room_id (str, optional): The ID of the room to join.
+        name (str, optional): The name of the room to join.
+
+    Returns:
+        None
+
+    Raises:
+        SystemExit: If the user is not authenticated, if the room cannot be found,
+                   or if there's an API error
+    """
     # Check if authenticated
     if not is_authenticated():
         click.echo("Not authenticated. Please run 'webex-terminal auth' first.")
@@ -160,7 +210,22 @@ def join_room(room_id, name):
 
 
 async def room_session(room):
-    """Interactive room session."""
+    """Interactive room session.
+
+    This asynchronous function creates an interactive session for a Webex room.
+    It sets up a websocket connection to receive real-time messages, handles user
+    input, and manages the display of messages in the terminal.
+
+    Args:
+        room (dict): A dictionary containing room information, including 'id' and 'title'.
+
+    Returns:
+        None: If the session ends normally
+        Awaitable: If switching to a new room, returns an awaitable for the new room session
+
+    Raises:
+        Exception: If there's an error during the room session
+    """
     client = WebexClient()
     websocket = await create_websocket_client()
 
@@ -177,6 +242,18 @@ async def room_session(room):
     # Make Enter add a new line, but submit if it's a command
     @kb.add("enter")
     def _(event):
+        """Handle Enter key press in the prompt.
+
+        This function determines the behavior when the Enter key is pressed.
+        If the current text starts with '/', it's treated as a command and submitted.
+        Otherwise, a new line is added to the input buffer.
+
+        Args:
+            event: The key press event object containing the current buffer.
+
+        Returns:
+            None
+        """
         buffer = event.current_buffer
         text = buffer.text
 
@@ -188,6 +265,17 @@ async def room_session(room):
 
     @kb.add("escape", "enter")
     def _(event):
+        """Handle Escape+Enter key combination in the prompt.
+
+        This function handles the behavior when Escape followed by Enter is pressed.
+        It validates and submits the current input buffer content.
+
+        Args:
+            event: The key press event object containing the current buffer.
+
+        Returns:
+            None
+        """
         event.current_buffer.validate_and_handle()
 
     send_key_desc = "Escape followed by Enter"
@@ -205,11 +293,24 @@ async def room_session(room):
 
     # Define message callback
     async def message_callback(message):
+        """Process incoming messages from the websocket.
+
+        This asynchronous function handles incoming messages from the Webex websocket.
+        It skips messages from the current user, retrieves sender information,
+        and displays the message in the terminal with appropriate formatting.
+
+        Args:
+            message (dict): The message object received from the websocket.
+
+        Returns:
+            None
+        """
         # Skip messages from self
         if message.get("personId") == me["id"]:
             return
 
         # Get sender info
+        # noinspection PyBroadException
         try:
             sender = client.get_person(message["personId"])
             sender_name = sender.get("displayName", "Unknown")
@@ -219,6 +320,7 @@ async def room_session(room):
         # Print the message
         # Use markdown content if available, otherwise fall back to text
         message_text = message.get("markdown", message.get("text", ""))
+        # noinspection PyBroadException
         try:
             # Yield control back to the event loop before displaying the message
             await asyncio.sleep(0)
@@ -250,8 +352,18 @@ async def room_session(room):
 
     # Function to handle user input
     async def handle_user_input():
+        """Handle user input in the interactive room session.
+
+        This asynchronous function manages the user input loop for the room session.
+        It captures user input, processes commands (prefixed with '/'), and sends
+        messages to the Webex room. It also handles room switching and session exit.
+
+        Returns:
+            None
+        """
         nonlocal new_room
 
+        # noinspection PyBroadException
         try:
             while not exit_event.is_set():
                 try:
@@ -344,7 +456,6 @@ async def room_session(room):
                         except WebexAPIError as e:
                             print(f"Error joining room: {e}")
                 else:
-                    # Send message
                     if text.strip():
                         try:
                             # Pass the text as both plain text and markdown
@@ -354,7 +465,7 @@ async def room_session(room):
                             )
                         except WebexAPIError as e:
                             print(f"Error sending message: {e}")
-        except Exception as e:
+        except Exception:
             exit_event.set()
 
     # Start the user input handler task
@@ -399,7 +510,18 @@ async def room_session(room):
 
 
 def main():
-    """Main entry point."""
+    """Main entry point for the Webex Terminal application.
+
+    This function serves as the entry point for the application when run from
+    the command line. It calls the CLI command group and handles any exceptions
+    that might occur during execution.
+
+    Returns:
+        None
+
+    Raises:
+        SystemExit: If an unhandled exception occurs during execution
+    """
     try:
         cli()
     except Exception as e:
