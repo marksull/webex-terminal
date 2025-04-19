@@ -448,7 +448,7 @@ async def room_session(room):
                             "  /files - List all files in the current room with their IDs"
                         )
                         print(
-                            "  /attach <filename> - Upload a file to the current room"
+                            "  /upload <filename> - Upload a file to the current room"
                         )
                         print(
                             "  /download <filename> - Download a file from the current room (can use filename or ID)"
@@ -616,11 +616,11 @@ async def room_session(room):
                             break
                         except WebexAPIError as e:
                             print(f"Error joining room: {e}")
-                    elif command == "attach" and len(command_parts) > 1:
+                    elif command == "upload" and len(command_parts) > 1:
                         # Upload a file to the current room
                         file_path = command_parts[1].strip()
                         if not file_path:
-                            print("Error: Please specify a filename to attach.")
+                            print("Error: Please specify a filename to upload.")
                         else:
                             try:
                                 # Try to upload the file
