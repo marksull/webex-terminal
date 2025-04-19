@@ -522,6 +522,9 @@ async def room_session(room):
                             "  /download <filename> - Download a file from the current room (can use filename or ID)"
                         )
                         print(
+                            "  /delete - Delete the last message you sent in the room"
+                        )
+                        print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
                         )
                         print("\nTo send a message that starts with a slash, prefix it with another slash:")
@@ -752,6 +755,27 @@ async def room_session(room):
                                 print(f"Error downloading file: {e}")
                             except Exception as e:
                                 print(f"Unexpected error downloading file: {e}")
+                    elif command == "delete":
+                        # Delete the last message sent by the user in the room
+                        try:
+                            # Get the last few messages in the room
+                            messages = client.list_messages(room["id"], max_results=20)
+
+                            # Find the last message sent by the current user
+                            last_message = None
+                            for message in messages:
+                                if message.get("personId") == me["id"]:
+                                    last_message = message
+                                    break
+
+                            if last_message:
+                                # Delete the message
+                                client.delete_message(last_message["id"])
+                                print("Last message deleted successfully.")
+                            else:
+                                print("No recent messages found from you in this room.")
+                        except WebexAPIError as e:
+                            print(f"Error deleting message: {e}")
                     elif command == "files":
                         # List all files in the current room
                         try:
