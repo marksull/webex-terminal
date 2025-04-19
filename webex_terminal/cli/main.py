@@ -426,7 +426,11 @@ async def room_session(room):
 
                 # Handle commands
                 if text.startswith("/"):
-                    command = text[1:].lower()
+                    # Extract the command part (without the /) but preserve case for parameters
+                    command_with_args = text[1:]
+                    # Get the command part in lowercase for case-insensitive command matching
+                    command_parts = command_with_args.split(maxsplit=1)
+                    command = command_parts[0].lower()
 
                     if command == "exit":
                         exit_event.set()
@@ -575,18 +579,19 @@ async def room_session(room):
                                         )
                         except WebexAPIError as e:
                             print(f"Error retrieving messages: {e}")
-                    elif command.startswith("join "):
+                    elif command == "join" and len(command_parts) > 1:
                         # Exit current room and join new one
-                        new_room_id = command[5:].strip()
+                        # Use the original case for the room ID
+                        new_room_id = command_parts[1].strip()
                         try:
                             new_room = client.get_room(new_room_id)
                             exit_event.set()
                             break
                         except WebexAPIError as e:
                             print(f"Error joining room: {e}")
-                    elif command.startswith("attach "):
+                    elif command == "attach" and len(command_parts) > 1:
                         # Upload a file to the current room
-                        file_path = command[7:].strip()
+                        file_path = command_parts[1].strip()
                         if not file_path:
                             print("Error: Please specify a filename to attach.")
                         else:

@@ -85,13 +85,22 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the HTTP request or response.
         """
+        # Construct the URL manually to preserve case sensitivity
+        # The requests library might normalize URLs, which could include transforming to lowercase
         url = f"{self.base_url}/{endpoint}"
         headers = self._get_headers()
 
         if 'headers' in kwargs:
             headers.update(kwargs.pop('headers'))
 
-        response = self.session.request(method, url, headers=headers, **kwargs)
+        # Create a Request object
+        req = requests.Request(method, url, headers=headers, **kwargs)
+
+        # Prepare the request
+        prepared_req = self.session.prepare_request(req)
+
+        # Send the prepared request
+        response = self.session.send(prepared_req)
 
         try:
             response.raise_for_status()
@@ -158,6 +167,8 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request or if the room doesn't exist.
         """
+        # Ensure the room_id is used as-is, without any transformation
+        # This is important because Webex room IDs are case-sensitive
         return self._request('GET', f'rooms/{room_id}')
 
     def get_room_by_name(self, name: str) -> Optional[Dict]:
