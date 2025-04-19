@@ -5,3 +5,4 @@ pyyaml>=5.1
 click>=8.0.0
 markdown<3.3.0
 importlib-metadata<5.0.0
+texttable>=1.6.4

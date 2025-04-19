@@ -436,6 +436,7 @@ async def room_session(room):
                         print("  /exit - Exit the room")
                         print("  /help - Show this help message")
                         print("  /list - List all rooms")
+                        print("  /members - List all members in the current room")
                         print("  /join <room_id> - Join another room")
                         print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
@@ -444,6 +445,50 @@ async def room_session(room):
                         # Use the display_rooms function with print output
                         # since we're in an async context
                         display_rooms(client, use_print=True)
+                    elif command == "members":
+                        # List all members in the current room
+                        try:
+                            from texttable import Texttable
+
+                            # Get room members
+                            members = client.list_room_members(room["id"])
+
+                            if not members:
+                                print("\nNo members found in this room.")
+                            else:
+                                # Create a table
+                                table = Texttable()
+                                table.set_deco(Texttable.HEADER)
+                                table.set_cols_align(["l", "l", "l", "c"])
+                                table.set_cols_width([30, 30, 20, 10])
+
+                                # Add header row
+                                table.add_row(["Display Name", "Email", "Created", "Moderator"])
+
+                                # Add member rows
+                                for member in members:
+                                    # Get person details
+                                    person_id = member.get("personId", "")
+                                    display_name = member.get("personDisplayName", "Unknown")
+                                    email = member.get("personEmail", "Unknown")
+                                    created = member.get("created", "Unknown")
+                                    is_moderator = "Yes" if member.get("isModerator", False) else "No"
+
+                                    # Format created date (if available)
+                                    if created != "Unknown":
+                                        # Just take the date part (first 10 characters)
+                                        created = created[:10]
+
+                                    # Add row to table
+                                    table.add_row([display_name, email, created, is_moderator])
+
+                                # Print the table
+                                print(f"\nMembers in room '{room['title']}':")
+                                print(table.draw())
+                        except ImportError:
+                            print("\nError: texttable module not found. Please install it with 'pip install texttable'.")
+                        except WebexAPIError as e:
+                            print(f"\nError retrieving room members: {e}")
                     elif command.isdigit() and 1 <= int(command) <= 10:
                         # Retrieve and display the last n messages in the room
                         num_messages = int(command)

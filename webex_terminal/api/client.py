@@ -334,3 +334,26 @@ class WebexClient:
         if people:
             return people[0]
         return None
+
+    def list_room_members(self, room_id: str, max_results: int = 100) -> List[Dict]:
+        """List members of a room.
+
+        This method retrieves a list of all members in a specified Webex room,
+        up to the specified maximum number of results.
+
+        Args:
+            room_id (str): ID of the room to retrieve members from.
+            max_results (int, optional): Maximum number of members to return. Defaults to 100.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing information about a member.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        params = {
+            'roomId': room_id,
+            'max': max_results,
+        }
+        response = self._request('GET', 'memberships', params=params)
+        return response.get('items', [])
