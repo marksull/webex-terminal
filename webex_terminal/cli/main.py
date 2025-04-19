@@ -435,13 +435,13 @@ async def room_session(room):
                         print("\nAvailable commands:")
                         print("  /exit - Exit the room")
                         print("  /help - Show this help message")
-                        print("  /list - List all rooms")
+                        print("  /rooms - List all rooms")
                         print("  /members - List all members in the current room")
                         print("  /join <room_id> - Join another room")
                         print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
                         )
-                    elif command == "list":
+                    elif command == "rooms":
                         # Use the display_rooms function with print output
                         # since we're in an async context
                         display_rooms(client, use_print=True)
