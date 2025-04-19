@@ -222,7 +222,8 @@ async def room_session(room):
             sender_name = 'Unknown'
 
         # Print the message
-        message_text = message.get('text', '')
+        # Use markdown content if available, otherwise fall back to text
+        message_text = message.get('markdown', message.get('text', ''))
         try:
             # Yield control back to the event loop before displaying the message
             await asyncio.sleep(0)
@@ -306,7 +307,8 @@ async def room_session(room):
                                         sender_name = 'Unknown'
 
                                     # Format and print the message
-                                    message_text = message.get('text', '')
+                                    # Use markdown content if available, otherwise fall back to text
+                                    message_text = message.get('markdown', message.get('text', ''))
                                     with patch_stdout():
                                         print_formatted_text(HTML(f"<username>{sender_name}</username>: <message>{message_text}</message>"), style=style)
                         except WebexAPIError as e:
@@ -324,7 +326,9 @@ async def room_session(room):
                     # Send message
                     if text.strip():
                         try:
-                            response = client.create_message(room['id'], text)
+                            # Pass the text as both plain text and markdown
+                            # The API will use markdown if it contains valid markdown
+                            response = client.create_message(room['id'], text, markdown=text)
                         except WebexAPIError as e:
                             print(f"Error sending message: {e}")
         except Exception as e:
