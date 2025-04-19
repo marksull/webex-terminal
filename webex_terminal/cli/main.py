@@ -456,6 +456,8 @@ async def room_session(room):
                         print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
                         )
+                        print("\nTo send a message that starts with a slash, prefix it with another slash:")
+                        print("  //hello - Sends the message '/hello' to the room")
                     elif command == "rooms":
                         # Use the display_rooms function with print output
                         # since we're in an async context
@@ -810,19 +812,32 @@ async def room_session(room):
                         except Exception as e:
                             print(f"\nUnexpected error retrieving files: {e}")
                     else:
-                        # If the text starts with a slash, it's an unknown command
+                        # If the text starts with a slash but isn't a known command
                         if text.startswith("/"):
-                            print(f"Error: Unknown command '{text}'")
-                        # Otherwise, send the message to the room
-                        elif text.strip():
-                            try:
-                                # Pass the text as both plain text and markdown
-                                # The API will use markdown if it contains valid markdown
-                                response = client.create_message(
-                                    room["id"], text, markdown=text
-                                )
-                            except WebexAPIError as e:
-                                print(f"Error sending message: {e}")
+                            # Check if it's a message that starts with a slash (e.g., "//" or "/text")
+                            if text.startswith("//"):
+                                # Remove the first slash and send the rest as a message
+                                message_text = text[1:]
+                                try:
+                                    # Pass the text as both plain text and markdown
+                                    # The API will use markdown if it contains valid markdown
+                                    response = client.create_message(
+                                        room["id"], message_text, markdown=message_text
+                                    )
+                                except WebexAPIError as e:
+                                    print(f"Error sending message: {e}")
+                            else:
+                                print(f"Error: Unknown command '{text}'")
+                # Otherwise, send the message to the room
+                elif text.strip():
+                    try:
+                        # Pass the text as both plain text and markdown
+                        # The API will use markdown if it contains valid markdown
+                        response = client.create_message(
+                            room["id"], text, markdown=text
+                        )
+                    except WebexAPIError as e:
+                        print(f"Error sending message: {e}")
         except Exception:
             exit_event.set()
 

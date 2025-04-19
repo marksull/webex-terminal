@@ -63,6 +63,8 @@ webex-terminal join-room --name "Room Name"
 
 Once in a room, you can type messages directly in the terminal. Press Enter to send.
 
+To send a message that starts with a slash (e.g., "/hello"), prefix it with another slash (e.g., "//hello").
+
 ### Commands
 
 While in a room, you can use the following commands:
