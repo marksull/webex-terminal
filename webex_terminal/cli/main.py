@@ -437,6 +437,7 @@ async def room_session(room):
                         print("  /help - Show this help message")
                         print("  /rooms - List all rooms")
                         print("  /members - List all members in the current room")
+                        print("  /detail - Display details about the current room")
                         print("  /join <room_id> - Join another room")
                         print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
@@ -489,6 +490,49 @@ async def room_session(room):
                             print("\nError: texttable module not found. Please install it with 'pip install texttable'.")
                         except WebexAPIError as e:
                             print(f"\nError retrieving room members: {e}")
+                    elif command == "detail":
+                        # Display details about the current room
+                        try:
+                            # Get the latest room details
+                            room_details = client.get_room(room["id"])
+
+                            # Get room members count
+                            members = client.list_room_members(room["id"])
+                            member_count = len(members)
+
+                            # Print room details
+                            print("\nRoom Details:")
+                            print(f"  Title: {room_details.get('title', 'Unknown')}")
+                            print(f"  ID: {room_details.get('id', 'Unknown')}")
+                            print(f"  Type: {room_details.get('type', 'Unknown').capitalize()}")
+
+                            # Format and display creation date if available
+                            created = room_details.get('created', 'Unknown')
+                            if created != 'Unknown':
+                                # Just take the date part (first 10 characters)
+                                created = created[:10]
+                            print(f"  Created: {created}")
+
+                            # Display last activity if available
+                            last_activity = room_details.get('lastActivity', 'Unknown')
+                            if last_activity != 'Unknown':
+                                # Just take the date part (first 10 characters)
+                                last_activity = last_activity[:10]
+                            print(f"  Last Activity: {last_activity}")
+
+                            # Display team info if available
+                            if 'teamId' in room_details:
+                                print(f"  Team ID: {room_details.get('teamId', 'Unknown')}")
+
+                            # Display member count
+                            print(f"  Member Count: {member_count}")
+
+                            # Display if the room is locked
+                            is_locked = "Yes" if room_details.get('isLocked', False) else "No"
+                            print(f"  Locked: {is_locked}")
+
+                        except WebexAPIError as e:
+                            print(f"\nError retrieving room details: {e}")
                     elif command.isdigit() and 1 <= int(command) <= 10:
                         # Retrieve and display the last n messages in the room
                         num_messages = int(command)
