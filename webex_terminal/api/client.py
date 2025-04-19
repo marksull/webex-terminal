@@ -357,3 +357,67 @@ class WebexClient:
         }
         response = self._request('GET', 'memberships', params=params)
         return response.get('items', [])
+
+    def create_message_with_file(self, room_id: str, file_path: str, text: str = None) -> Dict:
+        """Send a message with a file attachment to a room.
+
+        This method sends a message with a file attachment to a specified Webex room.
+        The file is uploaded from the local file system.
+
+        Args:
+            room_id (str): ID of the room to send the message to.
+            file_path (str): Path to the file to upload.
+            text (str, optional): Message text to include with the file. Defaults to None.
+
+        Returns:
+            Dict: A dictionary containing information about the created message.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request or if the file doesn't exist.
+            FileNotFoundError: If the specified file doesn't exist.
+        """
+        import os
+
+        # Check if file exists
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        # Prepare the file for upload
+        file_name = os.path.basename(file_path)
+        files = {
+            'files': (file_name, open(file_path, 'rb'), 'application/octet-stream')
+        }
+
+        # Prepare the data payload
+        data = {
+            'roomId': room_id,
+        }
+
+        # Add text if provided
+        if text:
+            data['text'] = text
+
+        # Get headers without Content-Type as it will be set by the multipart request
+        headers = self._get_headers()
+        headers.pop('Content-Type', None)
+
+        # Make the request
+        url = f"{self.base_url}/messages"
+        response = self.session.post(url, headers=headers, data=data, files=files)
+
+        try:
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"HTTP Error: {e}"
+            try:
+                error_data = response.json()
+                if 'message' in error_data:
+                    error_msg = f"{error_msg} - {error_data['message']}"
+            except:
+                pass
+            raise WebexAPIError(error_msg)
+        except requests.exceptions.RequestException as e:
+            raise WebexAPIError(f"Request Error: {e}")
+        except ValueError:
+            return {}

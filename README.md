@@ -68,9 +68,13 @@ Once in a room, you can type messages directly in the terminal. Press Enter to s
 While in a room, you can use the following commands:
 
 - `/exit` - Exit the room
-- `/help` - Show available commands
-- `/list` - List all rooms
+- `/help` - Show this help message
+- `/rooms` - List all rooms
+- `/members` - List all members in the current room
+- `/detail` - Display details about the current room
 - `/join <room_id>` - Join another room
+- `/attach <filename>` - Upload a file to the current room
+- `/nn` - Show the last nn messages in the room (where nn is a number between 1 and 10)
 
 ## Development
 

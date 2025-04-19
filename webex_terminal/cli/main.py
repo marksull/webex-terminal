@@ -439,6 +439,7 @@ async def room_session(room):
                         print("  /members - List all members in the current room")
                         print("  /detail - Display details about the current room")
                         print("  /join <room_id> - Join another room")
+                        print("  /attach <filename> - Upload a file to the current room")
                         print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
                         )
@@ -583,16 +584,32 @@ async def room_session(room):
                             break
                         except WebexAPIError as e:
                             print(f"Error joining room: {e}")
-                else:
-                    if text.strip():
-                        try:
-                            # Pass the text as both plain text and markdown
-                            # The API will use markdown if it contains valid markdown
-                            response = client.create_message(
-                                room["id"], text, markdown=text
-                            )
-                        except WebexAPIError as e:
-                            print(f"Error sending message: {e}")
+                    elif command.startswith("attach "):
+                        # Upload a file to the current room
+                        file_path = command[7:].strip()
+                        if not file_path:
+                            print("Error: Please specify a filename to attach.")
+                        else:
+                            try:
+                                # Try to upload the file
+                                response = client.create_message_with_file(room["id"], file_path)
+                                print(f"File '{os.path.basename(file_path)}' uploaded successfully.")
+                            except FileNotFoundError:
+                                print(f"Error: File not found: {file_path}")
+                            except WebexAPIError as e:
+                                print(f"Error uploading file: {e}")
+                            except Exception as e:
+                                print(f"Unexpected error uploading file: {e}")
+                    else:
+                        if text.strip():
+                            try:
+                                # Pass the text as both plain text and markdown
+                                # The API will use markdown if it contains valid markdown
+                                response = client.create_message(
+                                    room["id"], text, markdown=text
+                                )
+                            except WebexAPIError as e:
+                                print(f"Error sending message: {e}")
         except Exception:
             exit_event.set()
 
