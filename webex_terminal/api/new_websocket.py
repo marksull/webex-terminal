@@ -181,10 +181,12 @@ class WebexWebsocket:
                     self.reconnection_count += 1
 
                     if self.reconnection_count >= self.max_reconnection_count:
+                        print(f"Maximum reconnection attempts ({self.max_reconnection_count}) reached. Giving up.")
                         break
 
                     # Wait before retrying
                     retry_delay = min(30, 2 ** self.reconnection_count)
+                    print(f"Reconnecting in {retry_delay} seconds (attempt {self.reconnection_count}/{self.max_reconnection_count})...")
 
                     try:
                         await asyncio.sleep(retry_delay)

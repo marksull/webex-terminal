@@ -138,12 +138,17 @@ def logout():
 
 
 @cli.command()
-def list_rooms():
+@click.argument("filter_text", required=False)
+def list_rooms(filter_text):
     """List available Webex rooms.
 
     This function retrieves and displays all Webex rooms that the
     authenticated user has access to. It requires authentication
     before it can be used.
+
+    Args:
+        filter_text (str, optional): Text to filter rooms by. Only rooms with titles
+                                    containing this text will be displayed.
 
     Returns:
         None
@@ -159,10 +164,30 @@ def list_rooms():
     try:
         # Get rooms
         client = WebexClient()
-        rooms = display_rooms(client)
+
+        # Get all rooms
+        rooms = client.list_rooms()
 
         if not rooms:
+            click.echo("No rooms found.")
             return
+
+        # Filter rooms if filter_text is provided
+        if filter_text:
+            filtered_rooms = [room for room in rooms if filter_text.lower() in room['title'].lower()]
+
+            if not filtered_rooms:
+                click.echo(f"No rooms found matching '{filter_text}'.")
+                return
+
+            # Display filtered rooms
+            click.echo(f"\nRooms matching '{filter_text}':")
+            click.echo("----------------")
+            for i, room in enumerate(filtered_rooms, 1):
+                click.echo(f"{i}. {room['title']} (ID: {room['id']})")
+        else:
+            # No filter, display all rooms using the display_rooms function
+            display_rooms(client)
 
         click.echo()
 
@@ -483,7 +508,7 @@ async def room_session(room):
                         print("\nAvailable commands:")
                         print("  /exit - Exit the room")
                         print("  /help - Show this help message")
-                        print("  /rooms - List all rooms")
+                        print("  /rooms [filter] - List all rooms, optionally filtered by text")
                         print("  /members - List all members in the current room")
                         print("  /detail - Display details about the current room")
                         print("  /join <room_id> - Join another room")
@@ -502,9 +527,37 @@ async def room_session(room):
                         print("\nTo send a message that starts with a slash, prefix it with another slash:")
                         print("  //hello - Sends the message '/hello' to the room")
                     elif command == "rooms":
-                        # Use the display_rooms function with print output
-                        # since we're in an async context
-                        display_rooms(client, use_print=True)
+                        # Check if there's additional text to filter rooms
+                        filter_text = ""
+                        if len(command_parts) > 1:
+                            filter_text = command_parts[1].strip().lower()
+
+                        # Get all rooms
+                        rooms = client.list_rooms()
+
+                        if not rooms:
+                            print("No rooms found.")
+                            continue
+
+                        # Filter rooms if filter_text is provided
+                        if filter_text:
+                            filtered_rooms = [r for r in rooms if filter_text in r['title'].lower()]
+
+                            if not filtered_rooms:
+                                print(f"\nNo rooms found matching '{filter_text}'.")
+                                continue
+
+                            # Display filtered rooms
+                            print(f"\nRooms matching '{filter_text}':")
+                            print("----------------")
+                            for i, r in enumerate(filtered_rooms, 1):
+                                print(f"{i}. {r['title']} (ID: {r['id']})")
+                        else:
+                            # No filter, display all rooms
+                            print("\nAvailable rooms:")
+                            print("----------------")
+                            for i, r in enumerate(rooms, 1):
+                                print(f"{i}. {r['title']} (ID: {r['id']})")
                     elif command == "members":
                         # List all members in the current room
                         try:
