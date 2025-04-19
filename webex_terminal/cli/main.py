@@ -606,7 +606,11 @@ async def room_session(room):
                             except Exception as e:
                                 print(f"Unexpected error uploading file: {e}")
                     else:
-                        if text.strip():
+                        # If the text starts with a slash, it's an unknown command
+                        if text.startswith("/"):
+                            print(f"Error: Unknown command '{text}'")
+                        # Otherwise, send the message to the room
+                        elif text.strip():
                             try:
                                 # Pass the text as both plain text and markdown
                                 # The API will use markdown if it contains valid markdown
