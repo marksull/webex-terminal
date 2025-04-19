@@ -19,12 +19,14 @@ from webex_terminal.api.new_websocket import create_websocket_client
 
 
 # Prompt toolkit style
-style = Style.from_dict({
-    'username': '#44ff44 bold',
-    'room': '#4444ff bold',
-    'message': '#ffffff',
-    'system': '#ff4444 italic',
-})
+style = Style.from_dict(
+    {
+        "username": "#44ff44 bold",
+        "room": "#4444ff bold",
+        "message": "#ffffff",
+        "system": "#ff4444 italic",
+    }
+)
 
 
 @click.group()
@@ -42,12 +44,16 @@ def auth():
         return
 
     # Get client credentials from environment variables
-    client_id = os.environ.get('WEBEX_CLIENT_ID')
-    client_secret = os.environ.get('WEBEX_CLIENT_SECRET')
+    client_id = os.environ.get("WEBEX_CLIENT_ID")
+    client_secret = os.environ.get("WEBEX_CLIENT_SECRET")
 
     if not client_id or not client_secret:
-        click.echo("Error: WEBEX_CLIENT_ID and WEBEX_CLIENT_SECRET environment variables must be set.")
-        click.echo("You can obtain these from the Webex Developer Portal: https://developer.webex.com/my-apps")
+        click.echo(
+            "Error: WEBEX_CLIENT_ID and WEBEX_CLIENT_SECRET environment variables must be set."
+        )
+        click.echo(
+            "You can obtain these from the Webex Developer Portal: https://developer.webex.com/my-apps"
+        )
         sys.exit(1)
 
     # Authenticate
@@ -98,8 +104,8 @@ def list_rooms():
 
 
 @cli.command()
-@click.argument('room_id', required=False)
-@click.option('--name', '-n', help='Room name to join')
+@click.argument("room_id", required=False)
+@click.option("--name", "-n", help="Room name to join")
 def join_room(room_id, name):
     """Join a Webex room by ID or name."""
     # Check if authenticated
@@ -116,7 +122,7 @@ def join_room(room_id, name):
             if not room:
                 click.echo(f"Room with name '{name}' not found.")
                 sys.exit(1)
-            room_id = room['id']
+            room_id = room["id"]
 
         # If no room ID or name provided, show list of rooms
         if not room_id:
@@ -138,7 +144,7 @@ def join_room(room_id, name):
                 click.echo("Invalid selection.")
                 sys.exit(1)
 
-            room_id = rooms[selection - 1]['id']
+            room_id = rooms[selection - 1]["id"]
 
         # Get room details
         room = client.get_room(room_id)
@@ -159,7 +165,7 @@ async def room_session(room):
     websocket = await create_websocket_client()
 
     # Set the current room - prefer globalId if available, otherwise use id
-    room_id = room.get('globalId', room['id'])
+    room_id = room.get("globalId", room["id"])
     websocket.set_room(room_id)
 
     # Get user info
@@ -169,40 +175,29 @@ async def room_session(room):
     kb = KeyBindings()
 
     # Make Enter add a new line, but submit if it's a command
-    @kb.add('enter')
+    @kb.add("enter")
     def _(event):
         buffer = event.current_buffer
         text = buffer.text
 
         # If the input starts with '/', treat it as a command and submit
-        if text.startswith('/'):
+        if text.startswith("/"):
             buffer.validate_and_handle()
         else:
-            # Otherwise, add a new line
             buffer.newline()
 
-    # Detect platform and set appropriate key binding
-    if sys.platform == 'darwin':  # macOS
-        # Make Command+Enter submit the input (Meta+Enter)
-        @kb.add('escape', 'enter')  # Fallback for terminals that don't support meta keys
-        def _(event):
-            event.current_buffer.validate_and_handle()
+    @kb.add("escape", "enter")
+    def _(event):
+        event.current_buffer.validate_and_handle()
 
-        send_key_desc = "Command+Enter (or Escape followed by Enter as fallback)"
-    else:  # Windows/Linux
-        # Make Windows+Enter or Ctrl+Enter submit the input
-        @kb.add('escape', 'enter')  # Fallback for all platforms
-        def _(event):
-            event.current_buffer.validate_and_handle()
+    send_key_desc = "Escape followed by Enter"
 
-        send_key_desc = "Windows+Enter or Ctrl+Enter (or Escape followed by Enter as fallback)"
-
-    # Create prompt session with multiline support and custom key bindings
     session = PromptSession(multiline=True, key_bindings=kb)
 
-    # Print welcome message
     print(f"\nJoined room: {room['title']}")
-    print(f"Type a message and press Enter to add a new line. Press {send_key_desc} to send. Type /help for available commands.")
+    print(
+        f"Type a message and press Enter to add a new line. Press {send_key_desc} to send. Type /help for available commands."
+    )
 
     # Create an event to signal when to exit the room
     exit_event = asyncio.Event()
@@ -211,28 +206,39 @@ async def room_session(room):
     # Define message callback
     async def message_callback(message):
         # Skip messages from self
-        if message.get('personId') == me['id']:
+        if message.get("personId") == me["id"]:
             return
 
         # Get sender info
         try:
-            sender = client.get_person(message['personId'])
-            sender_name = sender.get('displayName', 'Unknown')
+            sender = client.get_person(message["personId"])
+            sender_name = sender.get("displayName", "Unknown")
         except Exception:
-            sender_name = 'Unknown'
+            sender_name = "Unknown"
 
         # Print the message
         # Use markdown content if available, otherwise fall back to text
-        message_text = message.get('markdown', message.get('text', ''))
+        message_text = message.get("markdown", message.get("text", ""))
         try:
             # Yield control back to the event loop before displaying the message
             await asyncio.sleep(0)
 
             with patch_stdout():
                 # Format message with sender name as prefix, keeping the styling
-                print_formatted_text(HTML(f"\n<username>{sender_name}</username>: <message>{message_text}</message>"), style=style)
+                print_formatted_text(
+                    HTML(
+                        f"\n<username>{sender_name}</username>: <message>{message_text}</message>"
+                    ),
+                    style=style,
+                )
                 # Redisplay the prompt after the message
-                print_formatted_text(HTML(f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "), style=style, end='')
+                print_formatted_text(
+                    HTML(
+                        f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "
+                    ),
+                    style=style,
+                    end="",
+                )
 
             # Yield control back to the event loop after displaying the message
             await asyncio.sleep(0)
@@ -254,8 +260,10 @@ async def room_session(room):
 
                     with patch_stdout():
                         text = await session.prompt_async(
-                            HTML(f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "), 
-                            style=style
+                            HTML(
+                                f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "
+                            ),
+                            style=style,
                         )
 
                     # Yield control back to the event loop after getting user input
@@ -265,20 +273,22 @@ async def room_session(room):
                     break
 
                 # Handle commands
-                if text.startswith('/'):
+                if text.startswith("/"):
                     command = text[1:].lower()
 
-                    if command == 'exit':
+                    if command == "exit":
                         exit_event.set()
                         break
-                    elif command == 'help':
+                    elif command == "help":
                         print("\nAvailable commands:")
                         print("  /exit - Exit the room")
                         print("  /help - Show this help message")
                         print("  /list - List all rooms")
                         print("  /join <room_id> - Join another room")
-                        print("  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)")
-                    elif command == 'list':
+                        print(
+                            "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
+                        )
+                    elif command == "list":
                         rooms = client.list_rooms()
                         print("\nAvailable rooms:")
                         for i, r in enumerate(rooms, 1):
@@ -287,7 +297,9 @@ async def room_session(room):
                         # Retrieve and display the last n messages in the room
                         num_messages = int(command)
                         try:
-                            messages = client.list_messages(room['id'], max_results=num_messages)
+                            messages = client.list_messages(
+                                room["id"], max_results=num_messages
+                            )
                             if not messages:
                                 print("\nNo messages found in this room.")
                             else:
@@ -296,24 +308,33 @@ async def room_session(room):
                                 # Display them in chronological order (oldest first)
                                 for message in reversed(messages):
                                     # Skip messages without text
-                                    if 'text' not in message:
+                                    if "text" not in message:
                                         continue
 
                                     # Get sender info
                                     try:
-                                        sender = client.get_person(message['personId'])
-                                        sender_name = sender.get('displayName', 'Unknown')
+                                        sender = client.get_person(message["personId"])
+                                        sender_name = sender.get(
+                                            "displayName", "Unknown"
+                                        )
                                     except Exception:
-                                        sender_name = 'Unknown'
+                                        sender_name = "Unknown"
 
                                     # Format and print the message
                                     # Use markdown content if available, otherwise fall back to text
-                                    message_text = message.get('markdown', message.get('text', ''))
+                                    message_text = message.get(
+                                        "markdown", message.get("text", "")
+                                    )
                                     with patch_stdout():
-                                        print_formatted_text(HTML(f"<username>{sender_name}</username>: <message>{message_text}</message>"), style=style)
+                                        print_formatted_text(
+                                            HTML(
+                                                f"<username>{sender_name}</username>: <message>{message_text}</message>"
+                                            ),
+                                            style=style,
+                                        )
                         except WebexAPIError as e:
                             print(f"Error retrieving messages: {e}")
-                    elif command.startswith('join '):
+                    elif command.startswith("join "):
                         # Exit current room and join new one
                         new_room_id = command[5:].strip()
                         try:
@@ -328,7 +349,9 @@ async def room_session(room):
                         try:
                             # Pass the text as both plain text and markdown
                             # The API will use markdown if it contains valid markdown
-                            response = client.create_message(room['id'], text, markdown=text)
+                            response = client.create_message(
+                                room["id"], text, markdown=text
+                            )
                         except WebexAPIError as e:
                             print(f"Error sending message: {e}")
         except Exception as e:
@@ -368,6 +391,7 @@ async def room_session(room):
     finally:
         # Ensure websocket is disconnected
         if websocket:
+            # noinspection PyBroadException
             try:
                 await websocket.disconnect()
             except Exception:
@@ -383,5 +407,5 @@ def main():
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
