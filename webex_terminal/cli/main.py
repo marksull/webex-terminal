@@ -12,11 +12,10 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit import print_formatted_text
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
 
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
-from webex_terminal.api.new_websocket import WebexWebsocket, create_websocket_client
+from webex_terminal.api.new_websocket import create_websocket_client
 
 
 # Prompt toolkit style
@@ -182,17 +181,28 @@ async def room_session(room):
             # Otherwise, add a new line
             buffer.newline()
 
-    # Make Escape followed by Enter submit the input
-    @kb.add('escape', 'enter')
-    def _(event):
-        event.current_buffer.validate_and_handle()
+    # Detect platform and set appropriate key binding
+    if sys.platform == 'darwin':  # macOS
+        # Make Command+Enter submit the input (Meta+Enter)
+        @kb.add('escape', 'enter')  # Fallback for terminals that don't support meta keys
+        def _(event):
+            event.current_buffer.validate_and_handle()
+
+        send_key_desc = "Command+Enter (or Escape followed by Enter as fallback)"
+    else:  # Windows/Linux
+        # Make Windows+Enter or Ctrl+Enter submit the input
+        @kb.add('escape', 'enter')  # Fallback for all platforms
+        def _(event):
+            event.current_buffer.validate_and_handle()
+
+        send_key_desc = "Windows+Enter or Ctrl+Enter (or Escape followed by Enter as fallback)"
 
     # Create prompt session with multiline support and custom key bindings
     session = PromptSession(multiline=True, key_bindings=kb)
 
     # Print welcome message
     print(f"\nJoined room: {room['title']}")
-    print("Type a message and press Enter to add a new line. Press Escape followed by Enter to send. Type /help for available commands.")
+    print(f"Type a message and press Enter to add a new line. Press {send_key_desc} to send. Type /help for available commands.")
 
     # Create an event to signal when to exit the room
     exit_event = asyncio.Event()
