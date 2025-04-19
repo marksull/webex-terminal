@@ -314,6 +314,49 @@ async def room_session(room):
         f"Type a message and press Enter to add a new line. Press {send_key_desc} to send. Type /help for available commands."
     )
 
+    # Automatically display room details (same as /detail command)
+    try:
+        # Get the latest room details
+        room_details = client.get_room(room["id"])
+
+        # Get room members count
+        members = client.list_room_members(room["id"])
+        member_count = len(members)
+
+        # Print room details
+        print("\nRoom Details:")
+        print(f"  Title: {room_details.get('title', 'Unknown')}")
+        print(f"  ID: {room_details.get('id', 'Unknown')}")
+        print(f"  Type: {room_details.get('type', 'Unknown').capitalize()}")
+
+        # Format and display creation date if available
+        created = room_details.get("created", "Unknown")
+        if created != "Unknown":
+            # Just take the date part (first 10 characters)
+            created = created[:10]
+        print(f"  Created: {created}")
+
+        # Display last activity if available
+        last_activity = room_details.get("lastActivity", "Unknown")
+        if last_activity != "Unknown":
+            # Just take the date part (first 10 characters)
+            last_activity = last_activity[:10]
+        print(f"  Last Activity: {last_activity}")
+
+        # Display team info if available
+        if "teamId" in room_details:
+            print(f"  Team ID: {room_details.get('teamId', 'Unknown')}")
+
+        # Display member count
+        print(f"  Member Count: {member_count}")
+
+        # Display if the room is locked
+        is_locked = "Yes" if room_details.get("isLocked", False) else "No"
+        print(f"  Locked: {is_locked}")
+
+    except WebexAPIError as e:
+        print(f"\nError retrieving room details: {e}")
+
     # Create an event to signal when to exit the room
     exit_event = asyncio.Event()
     new_room = None
