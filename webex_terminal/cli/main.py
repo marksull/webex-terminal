@@ -443,7 +443,15 @@ async def room_session(room):
                         print("  /members - List all members in the current room")
                         print("  /detail - Display details about the current room")
                         print("  /join <room_id> - Join another room")
-                        print("  /attach <filename> - Upload a file to the current room")
+                        print(
+                            "  /files - List all files in the current room with their IDs"
+                        )
+                        print(
+                            "  /attach <filename> - Upload a file to the current room"
+                        )
+                        print(
+                            "  /download <filename> - Download a file from the current room (can use filename or ID)"
+                        )
                         print(
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
                         )
@@ -469,16 +477,24 @@ async def room_session(room):
                                 table.set_cols_width([30, 30, 20, 10])
 
                                 # Add header row
-                                table.add_row(["Display Name", "Email", "Created", "Moderator"])
+                                table.add_row(
+                                    ["Display Name", "Email", "Created", "Moderator"]
+                                )
 
                                 # Add member rows
                                 for member in members:
                                     # Get person details
                                     person_id = member.get("personId", "")
-                                    display_name = member.get("personDisplayName", "Unknown")
+                                    display_name = member.get(
+                                        "personDisplayName", "Unknown"
+                                    )
                                     email = member.get("personEmail", "Unknown")
                                     created = member.get("created", "Unknown")
-                                    is_moderator = "Yes" if member.get("isModerator", False) else "No"
+                                    is_moderator = (
+                                        "Yes"
+                                        if member.get("isModerator", False)
+                                        else "No"
+                                    )
 
                                     # Format created date (if available)
                                     if created != "Unknown":
@@ -486,13 +502,17 @@ async def room_session(room):
                                         created = created[:10]
 
                                     # Add row to table
-                                    table.add_row([display_name, email, created, is_moderator])
+                                    table.add_row(
+                                        [display_name, email, created, is_moderator]
+                                    )
 
                                 # Print the table
                                 print(f"\nMembers in room '{room['title']}':")
                                 print(table.draw())
                         except ImportError:
-                            print("\nError: texttable module not found. Please install it with 'pip install texttable'.")
+                            print(
+                                "\nError: texttable module not found. Please install it with 'pip install texttable'."
+                            )
                         except WebexAPIError as e:
                             print(f"\nError retrieving room members: {e}")
                     elif command == "detail":
@@ -509,31 +529,37 @@ async def room_session(room):
                             print("\nRoom Details:")
                             print(f"  Title: {room_details.get('title', 'Unknown')}")
                             print(f"  ID: {room_details.get('id', 'Unknown')}")
-                            print(f"  Type: {room_details.get('type', 'Unknown').capitalize()}")
+                            print(
+                                f"  Type: {room_details.get('type', 'Unknown').capitalize()}"
+                            )
 
                             # Format and display creation date if available
-                            created = room_details.get('created', 'Unknown')
-                            if created != 'Unknown':
+                            created = room_details.get("created", "Unknown")
+                            if created != "Unknown":
                                 # Just take the date part (first 10 characters)
                                 created = created[:10]
                             print(f"  Created: {created}")
 
                             # Display last activity if available
-                            last_activity = room_details.get('lastActivity', 'Unknown')
-                            if last_activity != 'Unknown':
+                            last_activity = room_details.get("lastActivity", "Unknown")
+                            if last_activity != "Unknown":
                                 # Just take the date part (first 10 characters)
                                 last_activity = last_activity[:10]
                             print(f"  Last Activity: {last_activity}")
 
                             # Display team info if available
-                            if 'teamId' in room_details:
-                                print(f"  Team ID: {room_details.get('teamId', 'Unknown')}")
+                            if "teamId" in room_details:
+                                print(
+                                    f"  Team ID: {room_details.get('teamId', 'Unknown')}"
+                                )
 
                             # Display member count
                             print(f"  Member Count: {member_count}")
 
                             # Display if the room is locked
-                            is_locked = "Yes" if room_details.get('isLocked', False) else "No"
+                            is_locked = (
+                                "Yes" if room_details.get("isLocked", False) else "No"
+                            )
                             print(f"  Locked: {is_locked}")
 
                         except WebexAPIError as e:
@@ -597,14 +623,161 @@ async def room_session(room):
                         else:
                             try:
                                 # Try to upload the file
-                                response = client.create_message_with_file(room["id"], file_path)
-                                print(f"File '{os.path.basename(file_path)}' uploaded successfully.")
+                                response = client.create_message_with_file(
+                                    room["id"], file_path
+                                )
+                                print(
+                                    f"File '{os.path.basename(file_path)}' uploaded successfully."
+                                )
                             except FileNotFoundError:
                                 print(f"Error: File not found: {file_path}")
                             except WebexAPIError as e:
                                 print(f"Error uploading file: {e}")
                             except Exception as e:
                                 print(f"Unexpected error uploading file: {e}")
+                    elif command == "download" and len(command_parts) > 1:
+                        # Download a file from the current room
+                        filename = command_parts[1].strip()
+                        if not filename:
+                            print("Error: Please specify a filename to download.")
+                        else:
+                            try:
+                                # Try to download the file
+                                save_path = client.download_file(room["id"], filename)
+                                print(
+                                    f"File '{filename}' downloaded successfully to '{save_path}'."
+                                )
+                            except FileNotFoundError:
+                                print(f"Error: File not found in room: {filename}")
+                            except WebexAPIError as e:
+                                print(f"Error downloading file: {e}")
+                            except Exception as e:
+                                print(f"Unexpected error downloading file: {e}")
+                    elif command == "files":
+                        # List all files in the current room
+                        try:
+                            # Get files in the room
+                            files = client.list_files(room["id"])
+
+                            if not files:
+                                print("\nNo files found in this room.")
+                            else:
+                                # Create a table to display files
+                                try:
+                                    from texttable import Texttable
+
+                                    # Create a table
+                                    table = Texttable()
+                                    table.set_deco(Texttable.HEADER)
+                                    table.set_cols_align(["l", "l", "l", "l", "l"])
+                                    table.set_cols_width([30, 15, 10, 15, 10])
+
+                                    # Add header row
+                                    table.add_row(["Filename", "Type", "Size", "Created", "ID"])
+
+                                    # Add file rows
+                                    for file_info in files:
+                                        # Get file details
+                                        file_id = file_info.get("id", "")
+                                        filename = file_info.get("filename", "")
+                                        content_type = file_info.get("contentType", "")
+
+                                        # Format content type to be more readable
+                                        if content_type:
+                                            # Extract the main type (e.g., "application/pdf" -> "pdf")
+                                            content_type_parts = content_type.split("/")
+                                            if len(content_type_parts) > 1:
+                                                content_type = content_type_parts[1].upper()
+                                            else:
+                                                content_type = content_type_parts[0].upper()
+
+                                        # Format file size to be more readable
+                                        size = file_info.get("size", 0)
+                                        if size:
+                                            # Convert to KB, MB, etc.
+                                            if size < 1024:
+                                                size_str = f"{size} B"
+                                            elif size < 1024 * 1024:
+                                                size_str = f"{size / 1024:.1f} KB"
+                                            elif size < 1024 * 1024 * 1024:
+                                                size_str = f"{size / (1024 * 1024):.1f} MB"
+                                            else:
+                                                size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
+                                        else:
+                                            size_str = ""
+
+                                        # Format created date to be more readable
+                                        created = file_info.get("created", "")
+                                        if created:
+                                            # Just take the date part (first 10 characters)
+                                            created = created[:10]
+
+                                        # Add row to table
+                                        table.add_row([filename, content_type, size_str, created, file_id])
+
+                                    # Print the table
+                                    print(f"\nFiles in room '{room['title']}':")
+                                    print(table.draw())
+                                    print(
+                                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
+                                    )
+                                except ImportError:
+                                    # If texttable is not available, use simple formatting
+                                    print(f"\nFiles in room '{room['title']}':")
+                                    print("--------------------")
+                                    print(
+                                        "Filename                          Type        Size        Created         ID"
+                                    )
+                                    print(
+                                        "--------------------              --------    --------    ------------    --------------------"
+                                    )
+                                    for file_info in files:
+                                        # Get file details
+                                        file_id = file_info.get("id", "")
+                                        filename = file_info.get("filename", "")
+                                        content_type = file_info.get("contentType", "")
+
+                                        # Format content type to be more readable
+                                        if content_type:
+                                            # Extract the main type (e.g., "application/pdf" -> "pdf")
+                                            content_type_parts = content_type.split("/")
+                                            if len(content_type_parts) > 1:
+                                                content_type = content_type_parts[1].upper()
+                                            else:
+                                                content_type = content_type_parts[0].upper()
+
+                                        # Format file size to be more readable
+                                        size = file_info.get("size", 0)
+                                        if size:
+                                            # Convert to KB, MB, etc.
+                                            if size < 1024:
+                                                size_str = f"{size} B"
+                                            elif size < 1024 * 1024:
+                                                size_str = f"{size / 1024:.1f} KB"
+                                            elif size < 1024 * 1024 * 1024:
+                                                size_str = f"{size / (1024 * 1024):.1f} MB"
+                                            else:
+                                                size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
+                                        else:
+                                            size_str = ""
+
+                                        # Format created date to be more readable
+                                        created = file_info.get("created", "")
+                                        if created:
+                                            # Just take the date part (first 10 characters)
+                                            created = created[:10]
+
+                                        # Print file info
+                                        print(
+                                            f"  {filename:<30} {content_type:<10} {size_str:<10} {created:<12} {file_id}"
+                                        )
+                                    print(
+                                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
+                                    )
+                        except WebexAPIError as e:
+                            print(f"\nError retrieving files: {e}")
+                        except Exception as e:
+                            print(f"\nUnexpected error retrieving files: {e}")
                     else:
                         # If the text starts with a slash, it's an unknown command
                         if text.startswith("/"):

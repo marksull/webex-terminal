@@ -17,6 +17,7 @@ class WebexAPIError(Exception):
     Attributes:
         message (str): The error message describing the API error.
     """
+
     pass
 
 
@@ -44,7 +45,7 @@ class WebexClient:
             None
         """
         self.config = load_config()
-        self.base_url = self.config['api_base_url']
+        self.base_url = self.config["api_base_url"]
         self.session = requests.Session()
 
     def _get_headers(self) -> Dict[str, str]:
@@ -61,11 +62,13 @@ class WebexClient:
         """
         token_data = get_token()
         if not token_data:
-            raise WebexAPIError("Not authenticated. Please run 'webex-terminal auth' first.")
+            raise WebexAPIError(
+                "Not authenticated. Please run 'webex-terminal auth' first."
+            )
 
         return {
-            'Authorization': f"Bearer {token_data['access_token']}",
-            'Content-Type': 'application/json',
+            "Authorization": f"Bearer {token_data['access_token']}",
+            "Content-Type": "application/json",
         }
 
     def _request(self, method: str, endpoint: str, **kwargs) -> Dict:
@@ -90,8 +93,8 @@ class WebexClient:
         url = f"{self.base_url}/{endpoint}"
         headers = self._get_headers()
 
-        if 'headers' in kwargs:
-            headers.update(kwargs.pop('headers'))
+        if "headers" in kwargs:
+            headers.update(kwargs.pop("headers"))
 
         # Create a Request object
         req = requests.Request(method, url, headers=headers, **kwargs)
@@ -109,7 +112,7 @@ class WebexClient:
             error_msg = f"HTTP Error: {e}"
             try:
                 error_data = response.json()
-                if 'message' in error_data:
+                if "message" in error_data:
                     error_msg = f"{error_msg} - {error_data['message']}"
             except:
                 pass
@@ -118,6 +121,78 @@ class WebexClient:
             raise WebexAPIError(f"Request Error: {e}")
         except ValueError:
             return {}
+
+    def _head_request(self, endpoint: str, **kwargs) -> Dict:
+        """Make a HEAD request to the Webex API and extract information from headers.
+
+        This method handles the details of making HEAD requests to the Webex API,
+        including setting up headers, handling errors, and extracting information
+        from the response headers.
+
+        Args:
+            endpoint (str): The API endpoint to call, relative to the base URL.
+            **kwargs: Additional arguments to pass to the requests library.
+
+        Returns:
+            Dict: A dictionary containing information extracted from the response headers.
+
+        Raises:
+            WebexAPIError: If there's an error with the HTTP request or response.
+        """
+        # Construct the URL manually to preserve case sensitivity
+        url = f"{self.base_url}/{endpoint}"
+        headers = self._get_headers()
+
+        if "headers" in kwargs:
+            headers.update(kwargs.pop("headers"))
+
+        try:
+            # Make the HEAD request
+            response = self.session.head(url, headers=headers, **kwargs)
+            response.raise_for_status()
+
+            # Extract information from headers
+            result = {}
+
+            # Get filename from Content-Disposition header
+            content_disposition = response.headers.get('Content-Disposition', '')
+            if 'filename=' in content_disposition:
+                # Extract filename from Content-Disposition header
+                # Format is typically: attachment; filename="example.pdf"
+                import re
+                filename_match = re.search(r'filename=["\']?([^"\';\n]+)["\']?', content_disposition)
+                if filename_match:
+                    result['name'] = filename_match.group(1)
+
+            # Get content type
+            content_type = response.headers.get('Content-Type', '')
+            if content_type:
+                result['contentType'] = content_type
+
+            # Get content length (file size)
+            content_length = response.headers.get('Content-Length', '')
+            if content_length and content_length.isdigit():
+                result['size'] = int(content_length)
+
+            # Add all other headers that might be useful
+            for header, value in response.headers.items():
+                # Convert header names to camelCase to match Webex API convention
+                header_parts = header.split('-')
+                camel_case_header = header_parts[0].lower() + ''.join(part.capitalize() for part in header_parts[1:])
+
+                # Add header to result if not already added
+                if camel_case_header not in result:
+                    result[camel_case_header] = value
+
+            return result
+
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"HTTP Error: {e}"
+            raise WebexAPIError(error_msg)
+        except requests.exceptions.RequestException as e:
+            raise WebexAPIError(f"Request Error: {e}")
+        except Exception as e:
+            raise WebexAPIError(f"Unexpected error: {e}")
 
     def get_me(self) -> Dict:
         """Get information about the authenticated user.
@@ -131,7 +206,7 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        return self._request('GET', 'people/me')
+        return self._request("GET", "people/me")
 
     def list_rooms(self, max_results: int = 100) -> List[Dict]:
         """List all rooms the user is a member of.
@@ -148,9 +223,9 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        params = {'max': max_results}
-        response = self._request('GET', 'rooms', params=params)
-        return response.get('items', [])
+        params = {"max": max_results}
+        response = self._request("GET", "rooms", params=params)
+        return response.get("items", [])
 
     def get_room(self, room_id: str) -> Dict:
         """Get details for a specific room.
@@ -169,7 +244,7 @@ class WebexClient:
         """
         # Ensure the room_id is used as-is, without any transformation
         # This is important because Webex room IDs are case-sensitive
-        return self._request('GET', f'rooms/{room_id}')
+        return self._request("GET", f"rooms/{room_id}")
 
     def get_room_by_name(self, name: str) -> Optional[Dict]:
         """Find a room by name.
@@ -189,7 +264,7 @@ class WebexClient:
         """
         rooms = self.list_rooms()
         for room in rooms:
-            if room['title'].lower() == name.lower():
+            if room["title"].lower() == name.lower():
                 return room
         return None
 
@@ -213,15 +288,15 @@ class WebexClient:
             WebexAPIError: If there's an error with the API request.
         """
         data = {
-            'roomId': room_id,
-            'text': text,
+            "roomId": room_id,
+            "text": text,
         }
 
         # Include markdown in the payload if provided
         if markdown:
-            data['markdown'] = markdown
+            data["markdown"] = markdown
 
-        return self._request('POST', 'messages', json=data)
+        return self._request("POST", "messages", json=data)
 
     def list_messages(self, room_id: str, max_results: int = 50) -> List[Dict]:
         """List messages in a room.
@@ -241,11 +316,11 @@ class WebexClient:
             WebexAPIError: If there's an error with the API request.
         """
         params = {
-            'roomId': room_id,
-            'max': max_results,
+            "roomId": room_id,
+            "max": max_results,
         }
-        response = self._request('GET', 'messages', params=params)
-        return response.get('items', [])
+        response = self._request("GET", "messages", params=params)
+        return response.get("items", [])
 
     def get_message(self, message_id: str) -> Dict:
         """Get details for a specific message.
@@ -262,7 +337,7 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request or if the message doesn't exist.
         """
-        return self._request('GET', f'messages/{message_id}')
+        return self._request("GET", f"messages/{message_id}")
 
     def delete_message(self, message_id: str) -> None:
         """Delete a message.
@@ -280,10 +355,14 @@ class WebexClient:
             WebexAPIError: If there's an error with the API request, if the message doesn't exist,
                           or if the user doesn't have permission to delete the message.
         """
-        self._request('DELETE', f'messages/{message_id}')
+        self._request("DELETE", f"messages/{message_id}")
 
-    def list_people(self, email: Optional[str] = None, display_name: Optional[str] = None,
-                   max_results: int = 50) -> List[Dict]:
+    def list_people(
+        self,
+        email: Optional[str] = None,
+        display_name: Optional[str] = None,
+        max_results: int = 50,
+    ) -> List[Dict]:
         """List people in the Webex organization.
 
         This method retrieves a list of people from the Webex organization,
@@ -300,14 +379,14 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        params = {'max': max_results}
+        params = {"max": max_results}
         if email:
-            params['email'] = email
+            params["email"] = email
         if display_name:
-            params['displayName'] = display_name
+            params["displayName"] = display_name
 
-        response = self._request('GET', 'people', params=params)
-        return response.get('items', [])
+        response = self._request("GET", "people", params=params)
+        return response.get("items", [])
 
     def get_person(self, person_id: str) -> Dict:
         """Get details for a specific person.
@@ -324,7 +403,7 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request or if the person doesn't exist.
         """
-        return self._request('GET', f'people/{person_id}')
+        return self._request("GET", f"people/{person_id}")
 
     def get_person_by_email(self, email: str) -> Optional[Dict]:
         """Find a person by email address.
@@ -363,13 +442,15 @@ class WebexClient:
             WebexAPIError: If there's an error with the API request.
         """
         params = {
-            'roomId': room_id,
-            'max': max_results,
+            "roomId": room_id,
+            "max": max_results,
         }
-        response = self._request('GET', 'memberships', params=params)
-        return response.get('items', [])
+        response = self._request("GET", "memberships", params=params)
+        return response.get("items", [])
 
-    def create_message_with_file(self, room_id: str, file_path: str, text: str = None) -> Dict:
+    def create_message_with_file(
+        self, room_id: str, file_path: str, text: str = None
+    ) -> Dict:
         """Send a message with a file attachment to a room.
 
         This method sends a message with a file attachment to a specified Webex room.
@@ -396,21 +477,21 @@ class WebexClient:
         # Prepare the file for upload
         file_name = os.path.basename(file_path)
         files = {
-            'files': (file_name, open(file_path, 'rb'), 'application/octet-stream')
+            "files": (file_name, open(file_path, "rb"), "application/octet-stream")
         }
 
         # Prepare the data payload
         data = {
-            'roomId': room_id,
+            "roomId": room_id,
         }
 
         # Add text if provided
         if text:
-            data['text'] = text
+            data["text"] = text
 
         # Get headers without Content-Type as it will be set by the multipart request
         headers = self._get_headers()
-        headers.pop('Content-Type', None)
+        headers.pop("Content-Type", None)
 
         # Make the request
         url = f"{self.base_url}/messages"
@@ -423,7 +504,7 @@ class WebexClient:
             error_msg = f"HTTP Error: {e}"
             try:
                 error_data = response.json()
-                if 'message' in error_data:
+                if "message" in error_data:
                     error_msg = f"{error_msg} - {error_data['message']}"
             except:
                 pass
@@ -432,3 +513,369 @@ class WebexClient:
             raise WebexAPIError(f"Request Error: {e}")
         except ValueError:
             return {}
+
+    def list_files(self, room_id: str, max_results: int = 100) -> List[Dict]:
+        """List files available in a room.
+
+        This method retrieves a list of files that have been shared in a room.
+
+        Args:
+            room_id (str): ID of the room to search for files.
+            max_results (int, optional): Maximum number of messages to check for files. Defaults to 100.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing information about a file.
+                        Each dictionary contains 'filename', 'url', 'message_id', 'id', and other
+                        file details like 'contentType', 'size', 'created', 'creatorId', etc.
+                        The 'filename' is the human-readable filename, while 'id' is the file ID.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        # Get messages in the room
+        messages = self.list_messages(room_id, max_results=max_results)
+
+        # List to store file information
+        files = []
+
+        # Search for messages with file attachments
+        for message in messages:
+            # Check if the message has files
+            if "files" in message:
+                # Get the message details to get file information
+                message_details = self.get_message(message["id"])
+
+                # Check if the message has files
+                if "files" in message_details:
+                    for file_url in message_details["files"]:
+                        if isinstance(file_url, str):
+                            # Extract file ID from URL (the last part of the URL)
+                            file_id = file_url.split("/")[-1]
+
+                            # Get file details from the API
+                            try:
+                                file_details = self.get_file_details(file_id)
+
+                                # Check if file_details is empty
+                                if file_details:
+                                    # Create a file info dictionary with all the details
+                                    file_info = {
+                                        "filename": file_details.get("name", file_id),
+                                        "url": file_url,
+                                        "message_id": message["id"],
+                                        "id": file_id,
+                                        "contentType": file_details.get("contentType"),
+                                        "size": file_details.get("size"),
+                                        "created": file_details.get("created"),
+                                        "creatorId": file_details.get("creatorId"),
+                                        "downloadUrl": file_details.get("downloadUrl"),
+                                    }
+
+                                    # Add any other fields from file_details to file_info
+                                    for key, value in file_details.items():
+                                        if key not in file_info:
+                                            file_info[key] = value
+
+                                    # Add file info to the list
+                                    files.append(file_info)
+                                else:
+                                    # If file_details is empty, fall back to the old method
+                                    # but don't raise an exception
+                                    raise WebexAPIError("Empty file details")
+                            except WebexAPIError:
+                                # If we can't get file details, fall back to the old method
+                                import re
+
+                                # Look for actual filename in message details
+                                # Check common fields that might contain the filename
+                                actual_filename = None
+
+                                # Check if there's a 'fileName' field in the message
+                                if "fileName" in message_details:
+                                    actual_filename = message_details["fileName"]
+                                # Check if there's a 'content' field with filename info
+                                elif "content" in message_details and isinstance(
+                                    message_details["content"], dict
+                                ):
+                                    if "fileName" in message_details["content"]:
+                                        actual_filename = message_details["content"][
+                                            "fileName"
+                                        ]
+                                    elif "name" in message_details["content"]:
+                                        actual_filename = message_details["content"][
+                                            "name"
+                                        ]
+                                    # Check for files array in content
+                                    elif "files" in message_details[
+                                        "content"
+                                    ] and isinstance(
+                                        message_details["content"]["files"], list
+                                    ):
+                                        for file_item in message_details["content"][
+                                            "files"
+                                        ]:
+                                            if isinstance(file_item, dict):
+                                                if "name" in file_item:
+                                                    actual_filename = file_item["name"]
+                                                    break
+                                                elif "fileName" in file_item:
+                                                    actual_filename = file_item[
+                                                        "fileName"
+                                                    ]
+                                                    break
+                                                elif "displayName" in file_item:
+                                                    actual_filename = file_item[
+                                                        "displayName"
+                                                    ]
+                                                    break
+                                # Check if there's an 'attachments' field
+                                elif "attachments" in message_details and isinstance(
+                                    message_details["attachments"], list
+                                ):
+                                    for attachment in message_details["attachments"]:
+                                        if isinstance(attachment, dict):
+                                            if "fileName" in attachment:
+                                                actual_filename = attachment["fileName"]
+                                                break
+                                            elif "name" in attachment:
+                                                actual_filename = attachment["name"]
+                                                break
+                                            elif "contentName" in attachment:
+                                                actual_filename = attachment[
+                                                    "contentName"
+                                                ]
+                                                break
+                                            elif "displayName" in attachment:
+                                                actual_filename = attachment[
+                                                    "displayName"
+                                                ]
+                                                break
+                                            # Check for content field in attachment
+                                            elif "content" in attachment and isinstance(
+                                                attachment["content"], dict
+                                            ):
+                                                if "fileName" in attachment["content"]:
+                                                    actual_filename = attachment[
+                                                        "content"
+                                                    ]["fileName"]
+                                                    break
+                                                elif "name" in attachment["content"]:
+                                                    actual_filename = attachment[
+                                                        "content"
+                                                    ]["name"]
+                                                    break
+
+                                # Try to extract filename from the URL path
+                                if not actual_filename:
+                                    # The URL might contain the filename in the path
+                                    url_filename_match = re.search(
+                                        r"/([^/]+\.[a-zA-Z0-9]+)(?:\?|$)",
+                                        file_url,
+                                        re.IGNORECASE,
+                                    )
+                                    if url_filename_match:
+                                        actual_filename = url_filename_match.group(1)
+
+                                # If we couldn't find the actual filename, try to extract it from the text
+                                if not actual_filename and "text" in message_details:
+                                    # Look for patterns like "filename: something.txt" or "uploaded: something.txt"
+                                    text = message_details["text"]
+                                    # Try different patterns
+                                    filename_patterns = [
+                                        r"(?:filename|file|uploaded|attached):\s*([^\s]+\.[a-zA-Z0-9]+)",
+                                        r"uploaded\s+([^\s]+\.[a-zA-Z0-9]+)",
+                                        r"attached\s+([^\s]+\.[a-zA-Z0-9]+)",
+                                        r"file\s+([^\s]+\.[a-zA-Z0-9]+)",
+                                        r"([^\s]+\.[a-zA-Z0-9]{2,4})",  # Look for any word ending with a file extension
+                                    ]
+
+                                    for pattern in filename_patterns:
+                                        filename_match = re.search(
+                                            pattern, text, re.IGNORECASE
+                                        )
+                                        if filename_match:
+                                            actual_filename = filename_match.group(1)
+                                            break
+
+                                # If we still couldn't find the actual filename, use the file ID
+                                if not actual_filename:
+                                    actual_filename = file_id
+
+                                # Add file info to the list with limited information
+                                files.append(
+                                    {
+                                        "filename": actual_filename,
+                                        "url": file_url,
+                                        "message_id": message["id"],
+                                        "id": file_id,
+                                    }
+                                )
+
+        return files
+
+    def get_file_details(self, file_id: str) -> Dict:
+        """Get details for a specific file.
+
+        This method retrieves detailed information about a specific file
+        identified by its ID.
+
+        Args:
+            file_id (str): ID of the file to retrieve information for.
+
+        Returns:
+            Dict: A dictionary containing information about the file, including:
+                name: The actual filename.
+                contentType: The MIME type of the file.
+                size: The size of the file in bytes.
+                created: The timestamp when the file was created.
+                creatorId: The ID of the user who uploaded the file.
+                downloadUrl: A URL that can be used to download the file content.
+                And other relevant details.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request or if the file doesn't exist.
+        """
+        # The file_id in the URL might be base64 encoded and needs to be properly formatted
+        # Try to decode if it's base64 encoded
+        import base64
+        import re
+
+        # Check if the file_id looks like a base64 encoded string
+        # Base64 strings typically contain only alphanumeric characters, +, /, and =
+        if re.match(r'^[A-Za-z0-9+/=]+$', file_id):
+            try:
+                # Try to decode the file_id
+                decoded_id = base64.b64decode(file_id).decode('utf-8')
+
+                # If the decoded ID contains a URL or path, extract the relevant part
+                if '/' in decoded_id:
+                    parts = decoded_id.split('/')
+                    # The last part is usually the actual ID
+                    file_id = parts[-1]
+            except Exception:
+                # If decoding fails, use the original file_id
+                pass
+
+        # Use a HEAD request to get file details from headers
+        # According to Webex API documentation, this is the recommended way to get file details
+        try:
+            # Make a HEAD request to the contents endpoint
+            file_details = self._head_request(f"contents/{file_id}")
+
+            # If we got file details, add the download URL
+            if file_details:
+                file_details['downloadUrl'] = f"{self.base_url}/contents/{file_id}"
+
+            return file_details
+        except WebexAPIError as e:
+            # If HEAD request fails, try the traditional GET requests as fallback
+            try:
+                result = self._request("GET", f"contents/{file_id}")
+                return result
+            except WebexAPIError as e:
+                # If that fails, try the attachment/actions endpoint
+                try:
+                    result = self._request("GET", f"attachment/actions/{file_id}")
+                    return result
+                except WebexAPIError as e:
+                    # If that also fails, try the attachment endpoint
+                    try:
+                        result = self._request("GET", f"attachment/{file_id}")
+                        return result
+                    except WebexAPIError as e:
+                        # If all endpoints fail, return an empty dictionary
+                        return {}
+
+    def download_file(self, room_id: str, filename: str, save_path: str = None) -> str:
+        """Download a file from a room.
+
+        This method searches for a file with the specified filename or ID in a room
+        and downloads it to the local file system.
+
+        Args:
+            room_id (str): ID of the room to search for the file.
+            filename (str): Name or ID of the file to download.
+            save_path (str, optional): Path where the file should be saved.
+                                      If not provided, the file will be saved
+                                      in the current directory.
+
+        Returns:
+            str: The path where the file was saved.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+            FileNotFoundError: If the specified file is not found in the room.
+        """
+        import os
+
+        # Get list of files in the room
+        files = self.list_files(room_id)
+
+        # Search for the file by name or ID
+        file_url = None
+        download_url = None
+        actual_filename = None
+        for file_info in files:
+            # Check if the filename matches exactly (case-insensitive)
+            if file_info["filename"].lower() == filename.lower():
+                file_url = file_info["url"]
+                download_url = file_info.get("downloadUrl")
+                actual_filename = file_info["filename"]
+                break
+            # Check if the filename is contained in the file URL
+            elif filename.lower() in file_info["url"].lower():
+                file_url = file_info["url"]
+                download_url = file_info.get("downloadUrl")
+                actual_filename = file_info["filename"]
+                break
+            # Check if the filename matches the file ID
+            elif "id" in file_info and file_info["id"].lower() == filename.lower():
+                file_url = file_info["url"]
+                download_url = file_info.get("downloadUrl")
+                actual_filename = file_info["filename"]
+                break
+            # Check if the filename is a substring of the actual filename (case-insensitive)
+            elif filename.lower() in file_info["filename"].lower():
+                file_url = file_info["url"]
+                download_url = file_info.get("downloadUrl")
+                actual_filename = file_info["filename"]
+                break
+
+        # If file not found, raise an error
+        if not file_url and not download_url:
+            raise FileNotFoundError(f"File not found in room: {filename}")
+
+        # Use the actual filename for saving the file
+        if not actual_filename:
+            actual_filename = filename
+
+        # Clean up the filename to make it safe for the filesystem
+        # Remove any characters that might cause issues in filenames
+        import re
+
+        safe_filename = re.sub(r'[\\/*?:"<>|]', "_", actual_filename)
+
+        # Determine save path
+        if not save_path:
+            save_path = os.path.join(os.getcwd(), safe_filename)
+        else:
+            # If save_path is a directory, append the filename
+            if os.path.isdir(save_path):
+                save_path = os.path.join(save_path, safe_filename)
+
+        # Get headers for authentication
+        headers = self._get_headers()
+
+        # Use download_url if available, otherwise use file_url
+        url_to_use = download_url if download_url else file_url
+
+        # Download the file
+        response = self.session.get(url_to_use, headers=headers, stream=True)
+        response.raise_for_status()
+
+        # Save the file
+        with open(save_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        return save_path
