@@ -18,6 +18,43 @@ from webex_terminal.api.client import WebexClient, WebexAPIError
 from webex_terminal.api.new_websocket import create_websocket_client
 
 
+def display_rooms(client, use_print=False):
+    """Display a list of available Webex rooms.
+
+    This function retrieves and displays a list of Webex rooms that the user
+    has access to. It handles the case where no rooms are found.
+
+    Args:
+        client (WebexClient): An authenticated Webex API client
+        use_print (bool): If True, use print() instead of click.echo()
+
+    Returns:
+        list: The list of rooms, or None if no rooms were found
+    """
+    rooms = client.list_rooms()
+
+    if not rooms:
+        if use_print:
+            print("No rooms found.")
+        else:
+            click.echo("No rooms found.")
+        return None
+
+    # Display rooms
+    if use_print:
+        print("\nAvailable rooms:")
+        print("----------------")
+        for i, room in enumerate(rooms, 1):
+            print(f"{i}. {room['title']} (ID: {room['id']})")
+    else:
+        click.echo("\nAvailable rooms:")
+        click.echo("----------------")
+        for i, room in enumerate(rooms, 1):
+            click.echo(f"{i}. {room['title']} (ID: {room['id']})")
+
+    return rooms
+
+
 # Prompt toolkit style
 style = Style.from_dict(
     {
@@ -119,17 +156,11 @@ def list_rooms():
     try:
         # Get rooms
         client = WebexClient()
-        rooms = client.list_rooms()
+        rooms = display_rooms(client)
 
         if not rooms:
-            click.echo("No rooms found.")
             return
 
-        # Display rooms
-        click.echo("\nAvailable rooms:")
-        click.echo("----------------")
-        for i, room in enumerate(rooms, 1):
-            click.echo(f"{i}. {room['title']} (ID: {room['id']})")
         click.echo()
 
     except WebexAPIError as e:
@@ -176,17 +207,10 @@ def join_room(room_id, name):
 
         # If no room ID or name provided, show list of rooms
         if not room_id:
-            rooms = client.list_rooms()
+            rooms = display_rooms(client)
 
             if not rooms:
-                click.echo("No rooms found.")
                 return
-
-            # Display rooms
-            click.echo("\nAvailable rooms:")
-            click.echo("----------------")
-            for i, room in enumerate(rooms, 1):
-                click.echo(f"{i}. {room['title']} (ID: {room['id']})")
 
             # Prompt for room selection
             selection = click.prompt("Enter room number to join", type=int)
@@ -401,10 +425,9 @@ async def room_session(room):
                             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
                         )
                     elif command == "list":
-                        rooms = client.list_rooms()
-                        print("\nAvailable rooms:")
-                        for i, r in enumerate(rooms, 1):
-                            print(f"{i}. {r['title']} (ID: {r['id']})")
+                        # Use the display_rooms function with print output
+                        # since we're in an async context
+                        display_rooms(client, use_print=True)
                     elif command.isdigit() and 1 <= int(command) <= 10:
                         # Retrieve and display the last n messages in the room
                         num_messages = int(command)
