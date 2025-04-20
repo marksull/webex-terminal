@@ -422,7 +422,7 @@ async def room_session(room):
         f"Type a message and press Enter to add a new line. Press {send_key_desc} to send. Type /help for available commands."
     )
 
-    # Automatically display room details (same as /detail command)
+    # Automatically display room details (same as /details command)
     try:
         # Get the latest room details
         room_details = client.get_room(room["id"])
@@ -626,7 +626,7 @@ async def room_session(room):
         print("  /help - Show this help message")
         print("  /rooms [filter] - List all rooms, optionally filtered by text")
         print("  /members - List all members in the current room")
-        print("  /detail - Display details about the current room")
+        print("  /details - Display details about the current room")
         print("  /join <room_id> - Join another room")
         print("  /files - List all files in the current room with their IDs")
         print("  /upload <filename> - Upload a file to the current room")
@@ -752,8 +752,8 @@ async def room_session(room):
             print(f"\nError retrieving room members: {e}")
         return False
 
-    async def handle_detail_command():
-        """Handle the /detail command.
+    async def handle_details_command():
+        """Handle the /details command.
 
         This function retrieves and displays detailed information about the current room,
         including its title, ID, type, creation date, last activity, team ID (if applicable),
@@ -1371,8 +1371,8 @@ async def room_session(room):
                         should_break = await handle_rooms_command(command_parts)
                     elif command == "members":
                         should_break = await handle_members_command()
-                    elif command == "detail":
-                        should_break = await handle_detail_command()
+                    elif command == "details":
+                        should_break = await handle_details_command()
                     elif command.isdigit() and 1 <= int(command) <= 10:
                         should_break = await handle_numeric_command(command)
                     elif command == "join":

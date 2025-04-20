@@ -73,7 +73,7 @@ While in a room, you can use the following commands:
 - `/help` - Show this help message
 - `/rooms [filter]` - List all rooms, optionally filtered by text
 - `/members` - List all members in the current room
-- `/detail` - Display details about the current room
+- `/details` - Display details about the current room
 - `/join <room_id>` - Join another room
 - `/files` - List all files in the current room with their IDs
 - `/upload <filename>` - Upload a file to the current room
