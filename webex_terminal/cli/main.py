@@ -194,6 +194,7 @@ def logout():
         None
     """
     from webex_terminal.auth.auth import logout as auth_logout
+
     auth_logout()
     click.echo("Logged out successfully.")
 
@@ -235,7 +236,9 @@ def list_rooms(filter_text):
 
         # Filter rooms if filter_text is provided
         if filter_text:
-            filtered_rooms = [room for room in rooms if filter_text.lower() in room['title'].lower()]
+            filtered_rooms = [
+                room for room in rooms if filter_text.lower() in room["title"].lower()
+            ]
 
             if not filtered_rooms:
                 click.echo(f"No rooms found matching '{filter_text}'.")
@@ -324,7 +327,9 @@ def join_room(room_id, name):
             click.echo(f"Error: {e}")
             click.echo("\nTroubleshooting tips:")
             click.echo("1. Check your internet connection")
-            click.echo("2. Verify your authentication by running 'webex-terminal auth' again")
+            click.echo(
+                "2. Verify your authentication by running 'webex-terminal auth' again"
+            )
             click.echo("3. Check if Webex services are experiencing any outages")
             click.echo("4. Try again in a few minutes")
         else:
@@ -525,12 +530,22 @@ async def room_session(room):
                         file_path = client.download_file_from_url(file_url)
 
                         # Check if it's an image file based on extension or content type
-                        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
-                        is_image = any(file_path.lower().endswith(ext) for ext in image_extensions)
+                        image_extensions = [
+                            ".jpg",
+                            ".jpeg",
+                            ".png",
+                            ".gif",
+                            ".bmp",
+                            ".webp",
+                        ]
+                        is_image = any(
+                            file_path.lower().endswith(ext) for ext in image_extensions
+                        )
 
                         # If we couldn't determine from extension, try to check the file content
                         if not is_image:
                             import imghdr
+
                             img_type = imghdr.what(file_path)
                             is_image = img_type is not None
 
@@ -543,7 +558,9 @@ async def room_session(room):
 
                 # Add debug information if debug mode is enabled
                 if debug_mode:
-                    file_info += f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
+                    file_info += (
+                        f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
+                    )
 
             with patch_stdout():
                 # Load config to check if sound is enabled
@@ -560,10 +577,6 @@ async def room_session(room):
                     ),
                     style=style,
                 )
-
-                # Display file attachments if present
-                if file_info:
-                    print(file_info)
 
                 # Redisplay the prompt after the message
                 print_formatted_text(
@@ -599,34 +612,24 @@ async def room_session(room):
         print("  /members - List all members in the current room")
         print("  /detail - Display details about the current room")
         print("  /join <room_id> - Join another room")
-        print(
-            "  /files - List all files in the current room with their IDs"
-        )
-        print(
-            "  /upload <filename> - Upload a file to the current room"
-        )
+        print("  /files - List all files in the current room with their IDs")
+        print("  /upload <filename> - Upload a file to the current room")
         print(
             "  /download <filename> - Download a file from the current room (can use filename or ID)"
         )
         print(
             "  /open <filename> - Download and open a file from the current room with the default application"
         )
-        print(
-            "  /delete - Delete the last message you sent in the room"
-        )
-        print(
-            "  /debug - Toggle debug mode to show/hide message payloads"
-        )
-        print(
-            "  /sound - Toggle notification sound for new messages"
-        )
-        print(
-            "  /logout - Log out from Webex by deleting the token file"
-        )
+        print("  /delete - Delete the last message you sent in the room")
+        print("  /debug - Toggle debug mode to show/hide message payloads")
+        print("  /sound - Toggle notification sound for new messages")
+        print("  /logout - Log out from Webex by deleting the token file")
         print(
             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
         )
-        print("\nTo send a message that starts with a slash, prefix it with another slash:")
+        print(
+            "\nTo send a message that starts with a slash, prefix it with another slash:"
+        )
         print("  //hello - Sends the message '/hello' to the room")
         return False
 
@@ -646,7 +649,7 @@ async def room_session(room):
 
         # Filter rooms if filter_text is provided
         if filter_text:
-            filtered_rooms = [r for r in rooms if filter_text in r['title'].lower()]
+            filtered_rooms = [r for r in rooms if filter_text in r["title"].lower()]
 
             if not filtered_rooms:
                 print(f"\nNo rooms found matching '{filter_text}'.")
@@ -681,24 +684,16 @@ async def room_session(room):
                 table.set_cols_width([30, 30, 20, 10])
 
                 # Add header row
-                table.add_row(
-                    ["Display Name", "Email", "Created", "Moderator"]
-                )
+                table.add_row(["Display Name", "Email", "Created", "Moderator"])
 
                 # Add member rows
                 for member in members:
                     # Get person details
                     person_id = member.get("personId", "")
-                    display_name = member.get(
-                        "personDisplayName", "Unknown"
-                    )
+                    display_name = member.get("personDisplayName", "Unknown")
                     email = member.get("personEmail", "Unknown")
                     created = member.get("created", "Unknown")
-                    is_moderator = (
-                        "Yes"
-                        if member.get("isModerator", False)
-                        else "No"
-                    )
+                    is_moderator = "Yes" if member.get("isModerator", False) else "No"
 
                     # Format created date (if available)
                     if created != "Unknown":
@@ -706,9 +701,7 @@ async def room_session(room):
                         created = created[:10]
 
                     # Add row to table
-                    table.add_row(
-                        [display_name, email, created, is_moderator]
-                    )
+                    table.add_row([display_name, email, created, is_moderator])
 
                 # Print the table
                 print(f"\nMembers in room '{room['title']}':")
@@ -735,9 +728,7 @@ async def room_session(room):
             print("\nRoom Details:")
             print(f"  Title: {room_details.get('title', 'Unknown')}")
             print(f"  ID: {room_details.get('id', 'Unknown')}")
-            print(
-                f"  Type: {room_details.get('type', 'Unknown').capitalize()}"
-            )
+            print(f"  Type: {room_details.get('type', 'Unknown').capitalize()}")
 
             # Format and display creation date if available
             created = room_details.get("created", "Unknown")
@@ -755,17 +746,13 @@ async def room_session(room):
 
             # Display team info if available
             if "teamId" in room_details:
-                print(
-                    f"  Team ID: {room_details.get('teamId', 'Unknown')}"
-                )
+                print(f"  Team ID: {room_details.get('teamId', 'Unknown')}")
 
             # Display member count
             print(f"  Member Count: {member_count}")
 
             # Display if the room is locked
-            is_locked = (
-                "Yes" if room_details.get("isLocked", False) else "No"
-            )
+            is_locked = "Yes" if room_details.get("isLocked", False) else "No"
             print(f"  Locked: {is_locked}")
 
         except WebexAPIError as e:
@@ -776,9 +763,7 @@ async def room_session(room):
         """Handle numeric commands for retrieving messages."""
         num_messages = int(command)
         try:
-            messages = client.list_messages(
-                room["id"], max_results=num_messages
-            )
+            messages = client.list_messages(room["id"], max_results=num_messages)
             if not messages:
                 print("\nNo messages found in this room.")
             else:
@@ -793,17 +778,13 @@ async def room_session(room):
                     # Get sender info
                     try:
                         sender = client.get_person(message["personId"])
-                        sender_name = sender.get(
-                            "displayName", "Unknown"
-                        )
+                        sender_name = sender.get("displayName", "Unknown")
                     except Exception:
                         sender_name = "Unknown"
 
                     # Format and print the message
                     # Use markdown content if available, otherwise fall back to text
-                    message_text = message.get(
-                        "markdown", message.get("text", "")
-                    )
+                    message_text = message.get("markdown", message.get("text", ""))
 
                     # Convert markdown to HTML if markdown content is available
                     if message.get("markdown"):
@@ -813,7 +794,9 @@ async def room_session(room):
                         html_content = markdown.markdown(safe_text)
                         # Remove surrounding <p> tags if they exist
                         html_content = html_content.strip()
-                        if html_content.startswith("<p>") and html_content.endswith("</p>"):
+                        if html_content.startswith("<p>") and html_content.endswith(
+                            "</p>"
+                        ):
                             html_content = html_content[3:-4]
                     else:
                         # If no markdown, just escape the text
@@ -839,8 +822,18 @@ async def room_session(room):
                                 file_paths.append(file_path)
 
                                 # Check if it's an image file based on extension or content type
-                                image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
-                                is_image = any(file_path.lower().endswith(ext) for ext in image_extensions)
+                                image_extensions = [
+                                    ".jpg",
+                                    ".jpeg",
+                                    ".png",
+                                    ".gif",
+                                    ".bmp",
+                                    ".webp",
+                                ]
+                                is_image = any(
+                                    file_path.lower().endswith(ext)
+                                    for ext in image_extensions
+                                )
 
                                 # If we couldn't determine from extension, try to check the file content
                                 if not is_image:
@@ -908,12 +901,8 @@ async def room_session(room):
         else:
             try:
                 # Try to upload the file
-                response = client.create_message_with_file(
-                    room["id"], file_path
-                )
-                print(
-                    f"File '{os.path.basename(file_path)}' uploaded successfully."
-                )
+                response = client.create_message_with_file(room["id"], file_path)
+                print(f"File '{os.path.basename(file_path)}' uploaded successfully.")
             except FileNotFoundError:
                 print(f"Error: File not found: {file_path}")
             except WebexAPIError as e:
@@ -935,9 +924,7 @@ async def room_session(room):
             try:
                 # Try to download the file
                 save_path = client.download_file(room["id"], filename)
-                print(
-                    f"File '{filename}' downloaded successfully to '{save_path}'."
-                )
+                print(f"File '{filename}' downloaded successfully to '{save_path}'.")
             except FileNotFoundError:
                 print(f"Error: File not found in room: {filename}")
             except WebexAPIError as e:
@@ -959,18 +946,16 @@ async def room_session(room):
             try:
                 # Try to download the file
                 save_path = client.download_file(room["id"], filename)
-                print(
-                    f"File '{filename}' downloaded successfully to '{save_path}'."
-                )
+                print(f"File '{filename}' downloaded successfully to '{save_path}'.")
 
                 # Open the file with the default application based on the platform
                 try:
-                    if platform.system() == 'Windows':
+                    if platform.system() == "Windows":
                         os.startfile(save_path)
-                    elif platform.system() == 'Darwin':  # macOS
-                        subprocess.run(['open', save_path], check=True)
+                    elif platform.system() == "Darwin":  # macOS
+                        subprocess.run(["open", save_path], check=True)
                     else:  # Linux and other Unix-like systems
-                        subprocess.run(['xdg-open', save_path], check=True)
+                        subprocess.run(["xdg-open", save_path], check=True)
                     print(f"Opened file '{save_path}' with the default application.")
                 except Exception as e:
                     print(f"Error opening file: {e}")
@@ -1023,19 +1008,35 @@ async def room_session(room):
                     # Calculate column widths based on terminal width
                     # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
                     # Ensure minimum width of 80 characters to avoid errors on very small terminals
-                    effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+                    effective_width = max(
+                        terminal_width - 5, 80
+                    )  # Subtract 5 for table borders and padding
 
                     filename_width = int(effective_width * 0.30)
                     type_width = int(effective_width * 0.15)
                     size_width = int(effective_width * 0.10)
                     created_width = int(effective_width * 0.15)
-                    id_width = effective_width - filename_width - type_width - size_width - created_width
+                    id_width = (
+                        effective_width
+                        - filename_width
+                        - type_width
+                        - size_width
+                        - created_width
+                    )
 
                     # Create a table
                     table = Texttable(max_width=terminal_width)
                     table.set_deco(Texttable.HEADER)
                     table.set_cols_align(["l", "l", "l", "l", "l"])
-                    table.set_cols_width([filename_width, type_width, size_width, created_width, id_width])
+                    table.set_cols_width(
+                        [
+                            filename_width,
+                            type_width,
+                            size_width,
+                            created_width,
+                            id_width,
+                        ]
+                    )
 
                     # Add header row
                     table.add_row(["Filename", "Type", "Size", "Created", "ID"])
@@ -1078,7 +1079,9 @@ async def room_session(room):
                             created = created[:10]
 
                         # Add row to table
-                        table.add_row([filename, content_type, size_str, created, file_id])
+                        table.add_row(
+                            [filename, content_type, size_str, created, file_id]
+                        )
 
                     # Print the table
                     print(f"\nFiles in room '{room['title']}':")
@@ -1103,16 +1106,26 @@ async def room_session(room):
                     type_width = int(effective_width * 0.15)
                     size_width = int(effective_width * 0.10)
                     created_width = int(effective_width * 0.15)
-                    id_width = effective_width - filename_width - type_width - size_width - created_width
+                    id_width = (
+                        effective_width
+                        - filename_width
+                        - type_width
+                        - size_width
+                        - created_width
+                    )
 
                     print(f"\nFiles in room '{room['title']}':")
                     print("-" * terminal_width)
 
                     # Create header format string with dynamic widths
                     header_format = f"{{:<{filename_width}}} {{:<{type_width}}} {{:<{size_width}}} {{:<{created_width}}} {{:<{id_width}}}"
-                    print(header_format.format("Filename", "Type", "Size", "Created", "ID"))
+                    print(
+                        header_format.format(
+                            "Filename", "Type", "Size", "Created", "ID"
+                        )
+                    )
 
-                    # Create separator line with dynamic widths
+                    # Create a separator line with dynamic widths
                     separator_format = f"{{:-<{filename_width}}} {{:-<{type_width}}} {{:-<{size_width}}} {{:-<{created_width}}} {{:-<{id_width}}}"
                     print(separator_format.format("", "", "", "", ""))
                     for file_info in files:
@@ -1121,7 +1134,7 @@ async def room_session(room):
                         filename = file_info.get("filename", "")
                         content_type = file_info.get("contentType", "")
 
-                        # Format content type to be more readable
+                        # Format content types to be more readable
                         if content_type:
                             # Extract the main type (e.g., "application/pdf" -> "pdf")
                             content_type_parts = content_type.split("/")
@@ -1153,7 +1166,9 @@ async def room_session(room):
 
                         # Print file info using the dynamic format
                         print(
-                            header_format.format(filename, content_type, size_str, created, file_id)
+                            header_format.format(
+                                filename, content_type, size_str, created, file_id
+                            )
                         )
                     print(
                         "\nUse /download <filename> to download a file or /open <filename> to download and open it."
@@ -1202,9 +1217,13 @@ async def room_session(room):
 
         # Provide feedback to the user
         if config["sound_enabled"]:
-            print("\nSound notifications enabled. A bell sound will play when new messages are received.")
+            print(
+                "\nSound notifications enabled. A bell sound will play when new messages are received."
+            )
         else:
-            print("\nSound notifications disabled. No sound will play when new messages are received.")
+            print(
+                "\nSound notifications disabled. No sound will play when new messages are received."
+            )
 
         return False
 
@@ -1215,6 +1234,7 @@ async def room_session(room):
         """
         # Call the logout function from auth module
         from webex_terminal.auth.auth import logout as auth_logout
+
         auth_logout()
 
         # Provide feedback to the user
@@ -1248,9 +1268,7 @@ async def room_session(room):
             try:
                 # Pass the text as both plain text and markdown
                 # The API will use markdown if it contains valid markdown
-                response = client.create_message(
-                    room["id"], text, markdown=text
-                )
+                response = client.create_message(room["id"], text, markdown=text)
             except WebexAPIError as e:
                 print(f"Error sending message: {e}")
         return False
