@@ -71,12 +71,22 @@ While in a room, you can use the following commands:
 
 - `/exit` - Exit the room
 - `/help` - Show this help message
-- `/rooms` - List all rooms
+- `/rooms [filter]` - List all rooms, optionally filtered by text
 - `/members` - List all members in the current room
 - `/detail` - Display details about the current room
 - `/join <room_id>` - Join another room
+- `/files` - List all files in the current room with their IDs
 - `/upload <filename>` - Upload a file to the current room
+- `/download <filename>` - Download a file from the current room (can use filename or ID)
+- `/open <filename>` - Download and open a file from the current room with the default application
+- `/delete` - Delete the last message you sent in the room
+- `/debug` - Toggle debug mode to show/hide message payloads
+- `/sound` - Toggle notification sound for new messages
+- `/logout` - Log out from Webex by deleting the token file
 - `/nn` - Show the last nn messages in the room (where nn is a number between 1 and 10)
+
+To send a message that starts with a slash, prefix it with another slash:
+- `//hello` - Sends the message '/hello' to the room
 
 ## Development
 
