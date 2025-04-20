@@ -9,6 +9,10 @@ import click
 import markdown
 import html
 import shutil
+import subprocess
+import platform
+import tempfile
+import imghdr
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
@@ -20,6 +24,60 @@ from texttable import Texttable
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
 from webex_terminal.api.new_websocket import create_websocket_client
+
+
+def display_image_in_terminal(image_path):
+    """Display an image in the terminal.
+
+    This function attempts to display an image directly in the terminal using
+    the appropriate method for the current operating system and terminal.
+
+    Args:
+        image_path (str): Path to the image file to display.
+
+    Returns:
+        bool: True if the image was displayed successfully, False otherwise.
+    """
+    system = platform.system()
+
+    try:
+        if system == "Darwin":  # macOS
+            # Check if running in iTerm2
+            if "ITERM_SESSION_ID" in os.environ:
+                # Use imgcat for iTerm2
+                subprocess.run(["imgcat", image_path], check=True)
+                return True
+            else:
+                # For Terminal.app, open the image in the default viewer
+                subprocess.run(["open", image_path], check=True)
+                print(f"Image opened in default viewer: {image_path}")
+                return True
+        elif system == "Linux":
+            # Try using display from ImageMagick
+            try:
+                subprocess.run(["display", image_path], check=True)
+                return True
+            except (subprocess.SubprocessError, FileNotFoundError):
+                # If display is not available, try xdg-open
+                try:
+                    subprocess.run(["xdg-open", image_path], check=True)
+                    print(f"Image opened in default viewer: {image_path}")
+                    return True
+                except (subprocess.SubprocessError, FileNotFoundError):
+                    print(f"Unable to display image. Image saved at: {image_path}")
+                    return False
+        elif system == "Windows":
+            # On Windows, open the image in the default viewer
+            os.startfile(image_path)
+            print(f"Image opened in default viewer: {image_path}")
+            return True
+        else:
+            print(f"Unsupported operating system. Image saved at: {image_path}")
+            return False
+    except Exception as e:
+        print(f"Error displaying image: {e}")
+        print(f"Image saved at: {image_path}")
+        return False
 
 
 def display_rooms(client, use_print=False):
@@ -447,6 +505,40 @@ async def room_session(room):
                 # If no markdown, just escape the text
                 html_content = html.escape(message_text)
 
+            # Check for file attachments
+            file_info = ""
+            if "files" in message:
+                file_info = "\n[Attachments]:"
+
+                # Process each file attachment
+                for file_url in message.get("files", []):
+                    file_info += f"\n- {file_url}"
+
+                    # Try to download and display image attachments
+                    try:
+                        # Download the file
+                        file_path = client.download_file_from_url(file_url)
+
+                        # Check if it's an image file based on extension or content type
+                        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+                        is_image = any(file_path.lower().endswith(ext) for ext in image_extensions)
+
+                        # If we couldn't determine from extension, try to check the file content
+                        if not is_image:
+                            import imghdr
+                            img_type = imghdr.what(file_path)
+                            is_image = img_type is not None
+
+                        # If it's an image, display it
+                        if is_image:
+                            # Display the image
+                            display_image_in_terminal(file_path)
+                    except Exception as e:
+                        file_info += f"\n  Error processing attachment: {e}"
+
+                # Add debug information
+                file_info += f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
+
             with patch_stdout():
                 # Format message with sender name as prefix, keeping the styling
                 print_formatted_text(
@@ -455,6 +547,11 @@ async def room_session(room):
                     ),
                     style=style,
                 )
+
+                # Display file attachments if present
+                if file_info:
+                    print(file_info)
+
                 # Redisplay the prompt after the message
                 print_formatted_text(
                     HTML(
@@ -466,7 +563,9 @@ async def room_session(room):
 
             # Yield control back to the event loop after displaying the message
             await asyncio.sleep(0)
-        except Exception:
+        except Exception as e:
+            # Print the exception for debugging
+            print(f"\nError processing message: {e}")
             pass
 
     # Set message callback

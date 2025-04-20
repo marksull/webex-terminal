@@ -770,6 +770,57 @@ class WebexClient:
                         # If all endpoints fail, return an empty dictionary
                         return {}
 
+    def download_file_from_url(self, file_url: str, save_path: str = None) -> str:
+        """Download a file directly from a URL.
+
+        This method downloads a file from a given URL and saves it to the local file system.
+
+        Args:
+            file_url (str): URL of the file to download.
+            save_path (str, optional): Path where the file should be saved.
+                                      If not provided, the file will be saved
+                                      in a temporary directory.
+
+        Returns:
+            str: The path where the file was saved.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        import os
+        import tempfile
+
+        # Get headers for authentication
+        headers = self._get_headers()
+
+        # Determine save path
+        if not save_path:
+            # Create a temporary directory if it doesn't exist
+            temp_dir = os.path.join(tempfile.gettempdir(), "webex-terminal")
+            os.makedirs(temp_dir, exist_ok=True)
+
+            # Generate a unique filename based on the URL
+            import hashlib
+            filename = hashlib.md5(file_url.encode()).hexdigest()
+
+            # Try to determine file extension from URL
+            if "." in file_url.split("/")[-1]:
+                ext = file_url.split("/")[-1].split(".")[-1]
+                filename = f"{filename}.{ext}"
+
+            save_path = os.path.join(temp_dir, filename)
+
+        # Download the file
+        response = self.session.get(file_url, headers=headers, stream=True)
+        response.raise_for_status()
+
+        # Save the file
+        with open(save_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        return save_path
+
     def download_file(self, room_id: str, filename: str, save_path: str = None) -> str:
         """Download a file from a room.
 
