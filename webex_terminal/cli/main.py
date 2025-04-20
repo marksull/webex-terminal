@@ -193,7 +193,8 @@ def logout():
     Returns:
         None
     """
-    logout()
+    from webex_terminal.auth.auth import logout as auth_logout
+    auth_logout()
     click.echo("Logged out successfully.")
 
 
@@ -615,6 +616,9 @@ async def room_session(room):
         )
         print(
             "  /sound - Toggle notification sound for new messages"
+        )
+        print(
+            "  /logout - Log out from Webex by deleting the token file"
         )
         print(
             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
@@ -1094,6 +1098,22 @@ async def room_session(room):
 
         return False
 
+    async def handle_logout_command():
+        """Handle the /logout command.
+
+        This function logs the user out by deleting the token file.
+        """
+        # Call the logout function from auth module
+        from webex_terminal.auth.auth import logout as auth_logout
+        auth_logout()
+
+        # Provide feedback to the user
+        print("\nLogged out successfully. Token file has been deleted.")
+
+        # Set the exit event to exit the room session
+        exit_event.set()
+        return True
+
     async def handle_slash_message(text):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
@@ -1195,6 +1215,8 @@ async def room_session(room):
                         should_break = await handle_debug_command()
                     elif command == "sound":
                         should_break = await handle_sound_command()
+                    elif command == "logout":
+                        should_break = await handle_logout_command()
                     else:
                         should_break = await handle_slash_message(text)
 
