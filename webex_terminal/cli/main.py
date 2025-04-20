@@ -786,8 +786,8 @@ async def room_session(room):
                 # Messages are returned in reverse chronological order (newest first)
                 # Display them in chronological order (oldest first)
                 for message in reversed(messages):
-                    # Skip messages without text
-                    if "text" not in message:
+                    # Skip messages without text or files
+                    if "text" not in message and "files" not in message:
                         continue
 
                     # Get sender info
@@ -804,13 +804,77 @@ async def room_session(room):
                     message_text = message.get(
                         "markdown", message.get("text", "")
                     )
+
+                    # Convert markdown to HTML if markdown content is available
+                    if message.get("markdown"):
+                        # Escape any HTML in the original message to prevent injection
+                        safe_text = html.escape(message_text)
+                        # Convert markdown to HTML
+                        html_content = markdown.markdown(safe_text)
+                        # Remove surrounding <p> tags if they exist
+                        html_content = html_content.strip()
+                        if html_content.startswith("<p>") and html_content.endswith("</p>"):
+                            html_content = html_content[3:-4]
+                    else:
+                        # If no markdown, just escape the text
+                        html_content = html.escape(message_text)
+
+                    # Prepare file info before displaying the message
+                    file_info = ""
+                    file_paths = []
+                    is_image_list = []
+
+                    # Check for file attachments
+                    if "files" in message:
+                        file_info = "[Attachments]:"
+
+                        # Process each file attachment
+                        for file_url in message.get("files", []):
+                            file_info += f"\n- {file_url}"
+
+                            # Try to download and display image attachments
+                            try:
+                                # Download the file
+                                file_path = client.download_file_from_url(file_url)
+                                file_paths.append(file_path)
+
+                                # Check if it's an image file based on extension or content type
+                                image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+                                is_image = any(file_path.lower().endswith(ext) for ext in image_extensions)
+
+                                # If we couldn't determine from extension, try to check the file content
+                                if not is_image:
+                                    img_type = imghdr.what(file_path)
+                                    is_image = img_type is not None
+
+                                is_image_list.append(is_image)
+                            except Exception as e:
+                                file_info += f"\n  Error processing attachment: {e}"
+                                file_paths.append(None)
+                                is_image_list.append(False)
+
+                    # Add debug information if debug mode is enabled
+                    if debug_mode:
+                        file_info += f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
+
+                    # Display the message
                     with patch_stdout():
                         print_formatted_text(
                             HTML(
-                                f"<username>{sender_name}</username>: <message>{message_text}</message>"
+                                f"<username>{sender_name}</username>: <message>{html_content}</message>"
                             ),
                             style=style,
                         )
+
+                        # Display file attachments if present
+                        if file_info:
+                            print(file_info)
+
+                        # Display images
+                        for i, file_path in enumerate(file_paths):
+                            if file_path and is_image_list[i]:
+                                # Display the image
+                                display_image_in_terminal(file_path)
         except WebexAPIError as e:
             print(f"Error retrieving messages: {e}")
         return False
