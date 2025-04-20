@@ -13,6 +13,7 @@ import subprocess
 import platform
 import tempfile
 import imghdr
+import re
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
@@ -629,6 +630,7 @@ async def room_session(room):
         print("  /details - Display details about the current room")
         print("  /join <room_id> - Join another room")
         print("  /files - List all files in the current room with their IDs")
+        print("  /links - List all links shared in the current room")
         print("  /upload <filename> - Upload a file to the current room")
         print(
             "  /download <filename> - Download a file from the current room (can use filename or ID)"
@@ -1273,6 +1275,127 @@ async def room_session(room):
 
         return False
 
+    async def handle_links_command():
+        """Handle the /links command.
+
+        This function retrieves messages from the current room, extracts links from them,
+        and displays the links in a formatted way with information about who shared them.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        try:
+            # Get messages from the room (use a higher limit to find more links)
+            messages = client.list_messages(room["id"], max_results=100)
+
+            if not messages:
+                print("\nNo messages found in this room.")
+                return False
+
+            # Regular expression to find URLs in text
+            url_pattern = re.compile(r'https?://\S+')
+
+            # List to store found links
+            links = []
+
+            # Process each message to extract links
+            for message in messages:
+                # Skip messages without text
+                if "text" not in message and "markdown" not in message:
+                    continue
+
+                # Get sender info
+                try:
+                    sender = client.get_person(message["personId"])
+                    sender_name = sender.get("displayName", "Unknown")
+                except Exception:
+                    sender_name = "Unknown"
+
+                # Get message text (prefer markdown if available)
+                message_text = message.get("markdown", message.get("text", ""))
+
+                # Find all URLs in the message text
+                found_urls = url_pattern.findall(message_text)
+
+                # Add each URL to the links list with metadata
+                for url in found_urls:
+                    # Get created date in a readable format
+                    created = message.get("created", "Unknown")
+                    if created != "Unknown":
+                        # Just take the date part (first 10 characters)
+                        created = created[:10]
+
+                    links.append({
+                        "url": url,
+                        "sender": sender_name,
+                        "created": created,
+                        "message_id": message.get("id", "")
+                    })
+
+            # Display the links
+            if not links:
+                print("\nNo links found in this room.")
+            else:
+                # Create a table to display links
+                try:
+                    # Get terminal width
+                    terminal_width = shutil.get_terminal_size().columns
+
+                    # Calculate column widths based on terminal width
+                    # Use proportions: URL (60%), Sender (25%), Date (15%)
+                    # Ensure minimum width of 80 characters
+                    effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+
+                    url_width = int(effective_width * 0.60)
+                    sender_width = int(effective_width * 0.25)
+                    date_width = effective_width - url_width - sender_width
+
+                    # Create a table
+                    table = Texttable(max_width=terminal_width)
+                    table.set_deco(Texttable.HEADER)
+                    table.set_cols_align(["l", "l", "l"])
+                    table.set_cols_width([url_width, sender_width, date_width])
+
+                    # Add header row
+                    table.add_row(["URL", "Shared By", "Date"])
+
+                    # Add link rows
+                    for link in links:
+                        table.add_row([link["url"], link["sender"], link["created"]])
+
+                    # Print the table
+                    print(f"\nLinks in room '{room['title']}' ({len(links)} found):")
+                    print(table.draw())
+
+                except ImportError:
+                    # If texttable is not available, use simple formatting
+                    print(f"\nLinks in room '{room['title']}' ({len(links)} found):")
+                    print("-" * terminal_width)
+
+                    # Create header format string with dynamic widths
+                    header_format = f"{{:<{url_width}}} {{:<{sender_width}}} {{:<{date_width}}}"
+                    print(header_format.format("URL", "Shared By", "Date"))
+
+                    # Create a separator line
+                    separator_format = f"{{:-<{url_width}}} {{:-<{sender_width}}} {{:-<{date_width}}}"
+                    print(separator_format.format("", "", ""))
+
+                    # Print each link
+                    for link in links:
+                        # Truncate URL if it's too long for display
+                        url = link["url"]
+                        if len(url) > url_width:
+                            url = url[:url_width-3] + "..."
+
+                        print(header_format.format(url, link["sender"], link["created"]))
+
+        except WebexAPIError as e:
+            print(f"\nError retrieving messages: {e}")
+        except Exception as e:
+            print(f"\nUnexpected error: {e}")
+
+        return False
+
     async def handle_logout_command():
         """Handle the /logout command.
 
@@ -1391,6 +1514,8 @@ async def room_session(room):
                         should_break = await handle_debug_command()
                     elif command == "sound":
                         should_break = await handle_sound_command()
+                    elif command == "links":
+                        should_break = await handle_links_command()
                     elif command == "logout":
                         should_break = await handle_logout_command()
                     else:
