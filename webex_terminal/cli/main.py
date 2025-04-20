@@ -21,7 +21,11 @@ from prompt_toolkit import print_formatted_text
 from prompt_toolkit.key_binding import KeyBindings
 from texttable import Texttable
 
-from webex_terminal.auth.auth import authenticate, is_authenticated, logout
+from webex_terminal.auth.auth import (
+    authenticate,
+    is_authenticated,
+    logout as auth_logout,
+)
 from webex_terminal.api.client import WebexClient, WebexAPIError
 from webex_terminal.api.new_websocket import create_websocket_client
 from webex_terminal.config import load_config, save_config
@@ -193,8 +197,6 @@ def logout():
     Returns:
         None
     """
-    from webex_terminal.auth.auth import logout as auth_logout
-
     auth_logout()
     click.echo("Logged out successfully.")
 
@@ -599,12 +601,26 @@ async def room_session(room):
 
     # Helper methods for handling commands
     async def handle_exit_command():
-        """Handle the /exit command."""
+        """Handle the /exit command.
+
+        This function sets the exit event to signal that the user wants to exit
+        the current room session.
+
+        Returns:
+            bool: True to indicate the command was handled and the session should exit.
+        """
         exit_event.set()
         return True
 
     async def handle_help_command():
-        """Handle the /help command."""
+        """Handle the /help command.
+
+        This function displays a list of all available commands and their descriptions
+        to help the user navigate the application.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
         print("\nAvailable commands:")
         print("  /exit - Exit the room")
         print("  /help - Show this help message")
@@ -634,7 +650,17 @@ async def room_session(room):
         return False
 
     async def handle_rooms_command(command_parts):
-        """Handle the /rooms command."""
+        """Handle the /rooms command.
+
+        This function lists all available Webex rooms, optionally filtered by text.
+
+        Args:
+            command_parts (list): The command split into parts, where command_parts[1]
+                                 may contain filter text if provided.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
         # Check if there's additional text to filter rooms
         filter_text = ""
         if len(command_parts) > 1:
@@ -669,7 +695,19 @@ async def room_session(room):
         return False
 
     async def handle_members_command():
-        """Handle the /members command."""
+        """Handle the /members command.
+
+        This function retrieves and displays a list of all members in the current room,
+        including their display names, email addresses, when they joined, and whether
+        they are moderators.
+
+        Returns:
+            bool: False to indicate the session should continue.
+
+        Raises:
+            ImportError: If the texttable module is not installed.
+            WebexAPIError: If there's an error retrieving members from the API.
+        """
         try:
             # Get room members
             members = client.list_room_members(room["id"])
@@ -715,7 +753,18 @@ async def room_session(room):
         return False
 
     async def handle_detail_command():
-        """Handle the /detail command."""
+        """Handle the /detail command.
+
+        This function retrieves and displays detailed information about the current room,
+        including its title, ID, type, creation date, last activity, team ID (if applicable),
+        member count, and whether it's locked.
+
+        Returns:
+            bool: False to indicate the session should continue.
+
+        Raises:
+            WebexAPIError: If there's an error retrieving room details from the API.
+        """
         try:
             # Get the latest room details
             room_details = client.get_room(room["id"])
@@ -859,11 +908,6 @@ async def room_session(room):
                             style=style,
                         )
 
-                        # Display file attachments if present
-                        if file_info:
-                            print(file_info)
-
-                        # Display images
                         for i, file_path in enumerate(file_paths):
                             if file_path and is_image_list[i]:
                                 # Display the image
@@ -1187,6 +1231,9 @@ async def room_session(room):
 
         This function toggles the debug mode, which controls whether message payloads
         are displayed for debugging purposes.
+
+        Returns:
+            bool: False to indicate the session should continue.
         """
         nonlocal debug_mode
         # Toggle debug mode
@@ -1197,7 +1244,6 @@ async def room_session(room):
             print("\nDebug mode enabled. Message payloads will be displayed.")
         else:
             print("\nDebug mode disabled. Message payloads will not be displayed.")
-
         return False
 
     async def handle_sound_command():

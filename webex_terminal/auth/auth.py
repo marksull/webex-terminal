@@ -21,17 +21,26 @@ from webex_terminal.config import (
 
 
 class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
-    """HTTP request handler for OAuth callback."""
-    
+    """HTTP request handler for OAuth callback.
+
+    This class handles HTTP requests to the OAuth callback URL, extracting
+    the authorization code or error from the query parameters and storing
+    them in the server instance.
+
+    Attributes:
+        auth_code (str): The authorization code extracted from the callback URL.
+        error (str): The error message if authentication failed.
+    """
+
     def __init__(self, *args, **kwargs):
         self.auth_code = None
         self.error = None
         super().__init__(*args, **kwargs)
-    
+
     def do_GET(self):
         """Handle GET request to the callback URL."""
         query_components = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        
+
         if self.path.startswith('/callback'):
             if 'code' in query_components:
                 self.server.auth_code = query_components['code'][0]
@@ -67,7 +76,7 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b'<body><h1>Not Found</h1>')
             self.wfile.write(b'<p>The requested resource was not found.</p>')
             self.wfile.write(b'</body></html>')
-    
+
     def log_message(self, format, *args):
         """Suppress log messages."""
         return
@@ -75,7 +84,7 @@ class OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
 class OAuthCallbackServer(socketserver.TCPServer):
     """TCP server for OAuth callback."""
-    
+
     def __init__(self, server_address, RequestHandlerClass):
         self.auth_code = None
         self.error = None
@@ -140,62 +149,79 @@ def refresh_token(client_id: str, client_secret: str, refresh_token: str) -> Dic
 
 
 def authenticate(client_id: str, client_secret: str) -> Tuple[bool, Optional[str]]:
-    """
-    Authenticate with Webex using OAuth2.
-    
+    """Authenticate with Webex using OAuth2.
+
+    This function initiates the OAuth2 authentication flow with Webex,
+    opening a browser for the user to log in and authorize the application.
+    It then exchanges the authorization code for an access token.
+
+    Args:
+        client_id (str): The client ID from the Webex Developer Portal.
+        client_secret (str): The client secret from the Webex Developer Portal.
+
     Returns:
-        Tuple[bool, Optional[str]]: (success, error_message)
+        Tuple[bool, Optional[str]]: A tuple containing a success flag and an optional
+            error message. If authentication was successful, the first element will
+            be True and the second will be None. If authentication failed, the first
+            element will be False and the second will contain an error message.
     """
     # Start the callback server
     server = start_callback_server()
-    
+
     try:
         # Get the authorization URL and open it in a browser
         auth_url = get_authorization_url(client_id)
         print(f"Opening browser for authentication: {auth_url}")
         webbrowser.open(auth_url)
-        
+
         # Wait for the callback
         print("Waiting for authentication callback...")
         max_wait_time = 300  # 5 minutes
         start_time = time.time()
-        
+
         while server.auth_code is None and server.error is None:
             if time.time() - start_time > max_wait_time:
                 return False, "Authentication timed out"
             time.sleep(0.1)
-        
+
         if server.error:
             return False, f"Authentication error: {server.error}"
-        
+
         # Exchange the authorization code for an access token
         token_data = exchange_code_for_token(client_id, client_secret, server.auth_code)
-        
+
         # Save the token
         save_token(token_data)
-        
+
         return True, None
-    
+
     except Exception as e:
         return False, str(e)
-    
+
     finally:
         # Stop the callback server
         stop_callback_server(server)
 
 
 def get_token() -> Optional[Dict]:
-    """
-    Get the current access token, refreshing if necessary.
-    
+    """Get the current access token, refreshing if necessary.
+
+    This function retrieves the stored access token and checks if it's expired.
+    If the token is expired, it attempts to refresh it using the refresh token.
+
     Returns:
-        Optional[Dict]: The token data or None if not authenticated
+        Optional[Dict]: The token data dictionary containing the access token,
+            refresh token, and expiration information. Returns None if the user
+            is not authenticated or if the token cannot be refreshed.
+
+    Raises:
+        Exception: If there's an error refreshing the token.
     """
     token_data = load_token()
-    
+
     if token_data is None:
         return None
-    
+
     # Check if the token is expired
     expires_at = token_data.get('expires_at')
     if expires_at is None:
@@ -207,7 +233,7 @@ def get_token() -> Optional[Dict]:
         else:
             # If we don't have expires_in either, assume the token is valid
             return token_data
-    
+
     # If the token is expired, refresh it
     if time.time() > expires_at - 60:  # Refresh 60 seconds before expiration
         try:
@@ -216,18 +242,18 @@ def get_token() -> Optional[Dict]:
             # For this example, we'll assume they're in environment variables
             client_id = os.environ.get('WEBEX_CLIENT_ID')
             client_secret = os.environ.get('WEBEX_CLIENT_SECRET')
-            
+
             if not client_id or not client_secret:
                 print("Client credentials not found in environment variables")
                 return None
-            
+
             token_data = refresh_token(client_id, client_secret, token_data['refresh_token'])
             token_data['expires_at'] = time.time() + token_data['expires_in']
             save_token(token_data)
         except Exception as e:
             print(f"Error refreshing token: {e}")
             return None
-    
+
     return token_data
 
 

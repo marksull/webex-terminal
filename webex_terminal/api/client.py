@@ -2,6 +2,7 @@
 Webex API client for interacting with the Webex API.
 """
 import requests
+import re
 from typing import Dict, List, Optional, Any
 
 from webex_terminal.auth.auth import get_token
@@ -159,8 +160,6 @@ class WebexClient:
             if "filename=" in content_disposition:
                 # Extract filename from Content-Disposition header
                 # Format is typically: attachment; filename="example.pdf"
-                import re
-
                 filename_match = re.search(
                     r'filename=["\']?([^"\';\n]+)["\']?', content_disposition
                 )

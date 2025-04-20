@@ -15,15 +15,48 @@ from webex_terminal.api.client import WebexClient, WebexAPIError
 
 
 class HydraTypes(Enum):
+    """Enum for Hydra message types.
+
+    This enum defines the different types of messages that can be sent or received
+    through the Webex Hydra API.
+
+    Attributes:
+        MESSAGE: Represents a standard message.
+        ATTACHMENT_ACTION: Represents an action on an attachment.
+    """
     MESSAGE = "MESSAGE"
     ATTACHMENT_ACTION = "ATTACHMENT_ACTION"
 
 
 class WebexWebsocket:
-    """Websocket client for Webex events."""
+    """Websocket client for Webex events.
+
+    This class provides a websocket connection to the Webex API for receiving
+    real-time events such as new messages. It handles authentication, connection
+    management, and message processing.
+
+    Attributes:
+        client (WebexClient): An authenticated Webex API client.
+        websocket: The websocket connection.
+        device_info (dict): Information about the registered device.
+        running (bool): Whether the websocket is currently running.
+        message_callback: Callback function for new messages.
+        current_room_id (str): ID of the room to listen for messages.
+        reconnection_count (int): Number of reconnection attempts.
+        max_reconnection_count (int): Maximum number of reconnection attempts.
+        HYDRA_PREFIX (str): Prefix for Hydra IDs.
+        last_error: The last error encountered.
+    """
 
     def __init__(self):
-        """Initialize the websocket client."""
+        """Initialize the websocket client.
+
+        This method initializes the WebexWebsocket instance by setting up the
+        necessary attributes with default values.
+
+        Returns:
+            None
+        """
         self.client = WebexClient()
         self.websocket = None
         self.device_info = None
@@ -37,11 +70,28 @@ class WebexWebsocket:
         self.last_error = None
 
     def reset_reconnection_count(self):
-        """Reset the reconnection counter."""
+        """Reset the reconnection counter.
+
+        This method resets the reconnection counter to zero, which is used to track
+        the number of reconnection attempts made.
+
+        Returns:
+            None
+        """
         self.reconnection_count = 0
 
     async def _register_device(self) -> Dict:
-        """Register a device with Webex to receive websocket events."""
+        """Register a device with Webex to receive websocket events.
+
+        This asynchronous method registers a new device with the Webex API, which is
+        required to establish a websocket connection for receiving real-time events.
+
+        Returns:
+            Dict: Information about the registered device.
+
+        Raises:
+            Exception: If there's an error during device registration.
+        """
         try:
             # Get the current user's info
             me = self.client.get_me()
@@ -96,7 +146,18 @@ class WebexWebsocket:
             raise
 
     async def _get_device_info(self) -> Dict:
-        """Get the device info, registering a new device if necessary."""
+        """Get the device info, registering a new device if necessary.
+
+        This asynchronous method retrieves the device information needed for
+        establishing a websocket connection. If no device is registered yet,
+        it will register a new one.
+
+        Returns:
+            Dict: Information about the registered device.
+
+        Raises:
+            Exception: If there's an error during device registration.
+        """
         # Register a device if we don't have one
         if not self.device_info:
             await self._register_device()
@@ -104,7 +165,17 @@ class WebexWebsocket:
         return self.device_info
 
     async def connect(self):
-        """Connect to the Webex websocket."""
+        """Connect to the Webex websocket.
+
+        This asynchronous method establishes a connection to the Webex websocket
+        service, which allows receiving real-time events.
+
+        Returns:
+            bool: True if the connection was successful, False otherwise.
+
+        Raises:
+            Exception: If there's an error during connection.
+        """
         # Clean up any existing resources
         await self._cleanup_resources()
 
@@ -294,15 +365,32 @@ class WebexWebsocket:
                         pass
 
     def set_room(self, room_id: str):
-        """Set the current room to listen for messages."""
+        """Set the current room to listen for messages.
+
+        This method sets the ID of the room for which the websocket should
+        listen for new messages.
+
+        Args:
+            room_id (str): The ID of the room to listen for messages.
+
+        Returns:
+            None
+        """
         self.current_room_id = room_id
 
     def build_hydra_id(self, uuid, message_type=HydraTypes.MESSAGE.value):
-        """
-        Convert a UUID into Hydra ID that includes geo routing
-        :param uuid: The UUID to be encoded
-        :param message_type: The type of message to be encoded
-        :return (str): The encoded uuid
+        """Convert a UUID into Hydra ID that includes geo routing.
+
+        This method takes a UUID and converts it into a Hydra ID format that
+        includes geographic routing information.
+
+        Args:
+            uuid (str): The UUID to be encoded.
+            message_type (str, optional): The type of message to be encoded.
+                Defaults to HydraTypes.MESSAGE.value.
+
+        Returns:
+            str: The encoded UUID in Hydra ID format.
         """
         return (
             base64.b64encode(f"{self.HYDRA_PREFIX}/{message_type}/{uuid}".encode("ascii")).decode(
@@ -313,12 +401,33 @@ class WebexWebsocket:
         )
 
     def on_message(self, callback: Callable[[Dict], Any]):
-        """Set the callback for new messages."""
+        """Set the callback for new messages.
+
+        This method sets the callback function that will be called when a new
+        message is received from the websocket.
+
+        Args:
+            callback (Callable[[Dict], Any]): The callback function to be called
+                with the message data when a new message is received.
+
+        Returns:
+            None
+        """
         self.message_callback = callback
 
 
 async def create_websocket_client() -> WebexWebsocket:
-    """Create and connect a websocket client."""
+    """Create and connect a websocket client.
+
+    This asynchronous function creates a new WebexWebsocket instance and
+    establishes a connection to the Webex websocket service.
+
+    Returns:
+        WebexWebsocket: A connected websocket client.
+
+    Raises:
+        Exception: If there's an error during connection.
+    """
     client = WebexWebsocket()
 
     try:
