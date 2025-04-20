@@ -24,6 +24,7 @@ from texttable import Texttable
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
 from webex_terminal.api.new_websocket import create_websocket_client
+from webex_terminal.config import load_config, save_config
 
 
 def display_image_in_terminal(image_path):
@@ -544,6 +545,13 @@ async def room_session(room):
                     file_info += f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
 
             with patch_stdout():
+                # Load config to check if sound is enabled
+                config = load_config()
+
+                # Play bell sound if enabled
+                if config.get("sound_enabled", True):
+                    print("\a", end="", flush=True)  # \a is the ASCII bell character
+
                 # Format message with sender name as prefix, keeping the styling
                 print_formatted_text(
                     HTML(
@@ -604,6 +612,9 @@ async def room_session(room):
         )
         print(
             "  /debug - Toggle debug mode to show/hide message payloads"
+        )
+        print(
+            "  /sound - Toggle notification sound for new messages"
         )
         print(
             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
@@ -1060,6 +1071,29 @@ async def room_session(room):
 
         return False
 
+    async def handle_sound_command():
+        """Handle the /sound command.
+
+        This function toggles the sound setting, which controls whether a bell sound
+        is played when new messages are received.
+        """
+        # Load current config
+        config = load_config()
+
+        # Toggle sound enabled setting
+        config["sound_enabled"] = not config.get("sound_enabled", True)
+
+        # Save updated config
+        save_config(config)
+
+        # Provide feedback to the user
+        if config["sound_enabled"]:
+            print("\nSound notifications enabled. A bell sound will play when new messages are received.")
+        else:
+            print("\nSound notifications disabled. No sound will play when new messages are received.")
+
+        return False
+
     async def handle_slash_message(text):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
@@ -1159,6 +1193,8 @@ async def room_session(room):
                         should_break = await handle_files_command()
                     elif command == "debug":
                         should_break = await handle_debug_command()
+                    elif command == "sound":
+                        should_break = await handle_sound_command()
                     else:
                         should_break = await handle_slash_message(text)
 

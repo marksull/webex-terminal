@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "token_url": WEBEX_TOKEN_URL,
     "redirect_uri": REDIRECT_URI,
     "scope": SCOPE,
+    "sound_enabled": True,  # Default to enabled for message notification sounds
 }
 
 
@@ -37,11 +38,11 @@ def ensure_config_dir():
 def load_config():
     """Load configuration from file or create default if it doesn't exist."""
     ensure_config_dir()
-    
+
     if not os.path.exists(CONFIG_FILE):
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG
-    
+
     with open(CONFIG_FILE, "r") as f:
         return yaml.safe_load(f)
 
@@ -49,7 +50,7 @@ def load_config():
 def save_config(config):
     """Save configuration to file."""
     ensure_config_dir()
-    
+
     with open(CONFIG_FILE, "w") as f:
         yaml.dump(config, f)
 
@@ -57,10 +58,10 @@ def save_config(config):
 def load_token():
     """Load OAuth token from file."""
     ensure_config_dir()
-    
+
     if not os.path.exists(TOKEN_FILE):
         return None
-    
+
     with open(TOKEN_FILE, "r") as f:
         return yaml.safe_load(f)
 
@@ -68,7 +69,7 @@ def load_token():
 def save_token(token):
     """Save OAuth token to file."""
     ensure_config_dir()
-    
+
     with open(TOKEN_FILE, "w") as f:
         yaml.dump(token, f)
 
