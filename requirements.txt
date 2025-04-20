@@ -7,3 +7,4 @@ markdown<3.3.0
 #importlib-metadata<5.0.0
 importlib-metadata
 texttable>=1.6.4
+tqdm>=4.64.0

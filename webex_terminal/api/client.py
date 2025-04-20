@@ -774,6 +774,7 @@ class WebexClient:
         """Download a file directly from a URL.
 
         This method downloads a file from a given URL and saves it to the local file system.
+        It displays a progress bar during the download.
 
         Args:
             file_url (str): URL of the file to download.
@@ -789,6 +790,7 @@ class WebexClient:
         """
         import os
         import tempfile
+        from tqdm import tqdm
 
         # Get headers for authentication
         headers = self._get_headers()
@@ -814,10 +816,19 @@ class WebexClient:
         response = self.session.get(file_url, headers=headers, stream=True)
         response.raise_for_status()
 
-        # Save the file
+        # Get file size from headers if available
+        total_size = int(response.headers.get('content-length', 0))
+
+        # Create a progress bar
+        desc = f"Downloading {os.path.basename(save_path)}"
+
+        # Save the file with progress bar
         with open(save_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+            with tqdm(total=total_size, unit='B', unit_scale=True, desc=desc) as pbar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+                        pbar.update(len(chunk))
 
         return save_path
 
@@ -825,7 +836,8 @@ class WebexClient:
         """Download a file from a room.
 
         This method searches for a file with the specified filename or ID in a room
-        and downloads it to the local file system.
+        and downloads it to the local file system. It displays a progress bar during
+        the download.
 
         Args:
             room_id (str): ID of the room to search for the file.
@@ -842,6 +854,7 @@ class WebexClient:
             FileNotFoundError: If the specified file is not found in the room.
         """
         import os
+        from tqdm import tqdm
 
         # Get list of files in the room
         files = self.list_files(room_id)
@@ -908,9 +921,18 @@ class WebexClient:
         response = self.session.get(url_to_use, headers=headers, stream=True)
         response.raise_for_status()
 
-        # Save the file
+        # Get file size from headers if available
+        total_size = int(response.headers.get('content-length', 0))
+
+        # Create a progress bar
+        desc = f"Downloading {safe_filename}"
+
+        # Save the file with progress bar
         with open(save_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+            with tqdm(total=total_size, unit='B', unit_scale=True, desc=desc) as pbar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:  # filter out keep-alive new chunks
+                        f.write(chunk)
+                        pbar.update(len(chunk))
 
         return save_path
