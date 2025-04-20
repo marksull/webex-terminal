@@ -15,6 +15,7 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit import print_formatted_text
 from prompt_toolkit.key_binding import KeyBindings
+from texttable import Texttable
 
 from webex_terminal.auth.auth import authenticate, is_authenticated, logout
 from webex_terminal.api.client import WebexClient, WebexAPIError
@@ -471,6 +472,501 @@ async def room_session(room):
     # Set message callback
     websocket.on_message(message_callback)
 
+    # Helper methods for handling commands
+    async def handle_exit_command():
+        """Handle the /exit command."""
+        exit_event.set()
+        return True
+
+    async def handle_help_command():
+        """Handle the /help command."""
+        print("\nAvailable commands:")
+        print("  /exit - Exit the room")
+        print("  /help - Show this help message")
+        print("  /rooms [filter] - List all rooms, optionally filtered by text")
+        print("  /members - List all members in the current room")
+        print("  /detail - Display details about the current room")
+        print("  /join <room_id> - Join another room")
+        print(
+            "  /files - List all files in the current room with their IDs"
+        )
+        print(
+            "  /upload <filename> - Upload a file to the current room"
+        )
+        print(
+            "  /download <filename> - Download a file from the current room (can use filename or ID)"
+        )
+        print(
+            "  /delete - Delete the last message you sent in the room"
+        )
+        print(
+            "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
+        )
+        print("\nTo send a message that starts with a slash, prefix it with another slash:")
+        print("  //hello - Sends the message '/hello' to the room")
+        return False
+
+    async def handle_rooms_command(command_parts):
+        """Handle the /rooms command."""
+        # Check if there's additional text to filter rooms
+        filter_text = ""
+        if len(command_parts) > 1:
+            filter_text = command_parts[1].strip().lower()
+
+        # Get all rooms
+        rooms = client.list_rooms()
+
+        if not rooms:
+            print("No rooms found.")
+            return False
+
+        # Filter rooms if filter_text is provided
+        if filter_text:
+            filtered_rooms = [r for r in rooms if filter_text in r['title'].lower()]
+
+            if not filtered_rooms:
+                print(f"\nNo rooms found matching '{filter_text}'.")
+                return False
+
+            # Display filtered rooms
+            print(f"\nRooms matching '{filter_text}':")
+            print("----------------")
+            for i, r in enumerate(filtered_rooms, 1):
+                print(f"{i}. {r['title']} (ID: {r['id']})")
+        else:
+            # No filter, display all rooms
+            print("\nAvailable rooms:")
+            print("----------------")
+            for i, r in enumerate(rooms, 1):
+                print(f"{i}. {r['title']} (ID: {r['id']})")
+        return False
+
+    async def handle_members_command():
+        """Handle the /members command."""
+        try:
+            # Get room members
+            members = client.list_room_members(room["id"])
+
+            if not members:
+                print("\nNo members found in this room.")
+            else:
+                # Create a table
+                table = Texttable()
+                table.set_deco(Texttable.HEADER)
+                table.set_cols_align(["l", "l", "l", "c"])
+                table.set_cols_width([30, 30, 20, 10])
+
+                # Add header row
+                table.add_row(
+                    ["Display Name", "Email", "Created", "Moderator"]
+                )
+
+                # Add member rows
+                for member in members:
+                    # Get person details
+                    person_id = member.get("personId", "")
+                    display_name = member.get(
+                        "personDisplayName", "Unknown"
+                    )
+                    email = member.get("personEmail", "Unknown")
+                    created = member.get("created", "Unknown")
+                    is_moderator = (
+                        "Yes"
+                        if member.get("isModerator", False)
+                        else "No"
+                    )
+
+                    # Format created date (if available)
+                    if created != "Unknown":
+                        # Just take the date part (first 10 characters)
+                        created = created[:10]
+
+                    # Add row to table
+                    table.add_row(
+                        [display_name, email, created, is_moderator]
+                    )
+
+                # Print the table
+                print(f"\nMembers in room '{room['title']}':")
+                print(table.draw())
+        except ImportError:
+            print(
+                "\nError: texttable module not found. Please install it with 'pip install texttable'."
+            )
+        except WebexAPIError as e:
+            print(f"\nError retrieving room members: {e}")
+        return False
+
+    async def handle_detail_command():
+        """Handle the /detail command."""
+        try:
+            # Get the latest room details
+            room_details = client.get_room(room["id"])
+
+            # Get room members count
+            members = client.list_room_members(room["id"])
+            member_count = len(members)
+
+            # Print room details
+            print("\nRoom Details:")
+            print(f"  Title: {room_details.get('title', 'Unknown')}")
+            print(f"  ID: {room_details.get('id', 'Unknown')}")
+            print(
+                f"  Type: {room_details.get('type', 'Unknown').capitalize()}"
+            )
+
+            # Format and display creation date if available
+            created = room_details.get("created", "Unknown")
+            if created != "Unknown":
+                # Just take the date part (first 10 characters)
+                created = created[:10]
+            print(f"  Created: {created}")
+
+            # Display last activity if available
+            last_activity = room_details.get("lastActivity", "Unknown")
+            if last_activity != "Unknown":
+                # Just take the date part (first 10 characters)
+                last_activity = last_activity[:10]
+            print(f"  Last Activity: {last_activity}")
+
+            # Display team info if available
+            if "teamId" in room_details:
+                print(
+                    f"  Team ID: {room_details.get('teamId', 'Unknown')}"
+                )
+
+            # Display member count
+            print(f"  Member Count: {member_count}")
+
+            # Display if the room is locked
+            is_locked = (
+                "Yes" if room_details.get("isLocked", False) else "No"
+            )
+            print(f"  Locked: {is_locked}")
+
+        except WebexAPIError as e:
+            print(f"\nError retrieving room details: {e}")
+        return False
+
+    async def handle_numeric_command(command):
+        """Handle numeric commands for retrieving messages."""
+        num_messages = int(command)
+        try:
+            messages = client.list_messages(
+                room["id"], max_results=num_messages
+            )
+            if not messages:
+                print("\nNo messages found in this room.")
+            else:
+                print(f"\nLast {num_messages} messages:")
+                # Messages are returned in reverse chronological order (newest first)
+                # Display them in chronological order (oldest first)
+                for message in reversed(messages):
+                    # Skip messages without text
+                    if "text" not in message:
+                        continue
+
+                    # Get sender info
+                    try:
+                        sender = client.get_person(message["personId"])
+                        sender_name = sender.get(
+                            "displayName", "Unknown"
+                        )
+                    except Exception:
+                        sender_name = "Unknown"
+
+                    # Format and print the message
+                    # Use markdown content if available, otherwise fall back to text
+                    message_text = message.get(
+                        "markdown", message.get("text", "")
+                    )
+                    with patch_stdout():
+                        print_formatted_text(
+                            HTML(
+                                f"<username>{sender_name}</username>: <message>{message_text}</message>"
+                            ),
+                            style=style,
+                        )
+        except WebexAPIError as e:
+            print(f"Error retrieving messages: {e}")
+        return False
+
+    async def handle_join_command(command_parts):
+        """Handle the /join command."""
+        nonlocal new_room
+        if len(command_parts) <= 1:
+            print("Error: Please specify a room ID to join.")
+            return False
+
+        # Use the original case for the room ID
+        new_room_id = command_parts[1].strip()
+        try:
+            new_room = client.get_room(new_room_id)
+            exit_event.set()
+            return True
+        except WebexAPIError as e:
+            print(f"Error joining room: {e}")
+        return False
+
+    async def handle_upload_command(command_parts):
+        """Handle the /upload command."""
+        if len(command_parts) <= 1:
+            print("Error: Please specify a filename to upload.")
+            return False
+
+        file_path = command_parts[1].strip()
+        if not file_path:
+            print("Error: Please specify a filename to upload.")
+        else:
+            try:
+                # Try to upload the file
+                response = client.create_message_with_file(
+                    room["id"], file_path
+                )
+                print(
+                    f"File '{os.path.basename(file_path)}' uploaded successfully."
+                )
+            except FileNotFoundError:
+                print(f"Error: File not found: {file_path}")
+            except WebexAPIError as e:
+                print(f"Error uploading file: {e}")
+            except Exception as e:
+                print(f"Unexpected error uploading file: {e}")
+        return False
+
+    async def handle_download_command(command_parts):
+        """Handle the /download command."""
+        if len(command_parts) <= 1:
+            print("Error: Please specify a filename to download.")
+            return False
+
+        filename = command_parts[1].strip()
+        if not filename:
+            print("Error: Please specify a filename to download.")
+        else:
+            try:
+                # Try to download the file
+                save_path = client.download_file(room["id"], filename)
+                print(
+                    f"File '{filename}' downloaded successfully to '{save_path}'."
+                )
+            except FileNotFoundError:
+                print(f"Error: File not found in room: {filename}")
+            except WebexAPIError as e:
+                print(f"Error downloading file: {e}")
+            except Exception as e:
+                print(f"Unexpected error downloading file: {e}")
+        return False
+
+    async def handle_delete_command():
+        """Handle the /delete command."""
+        try:
+            # Get the last few messages in the room
+            messages = client.list_messages(room["id"], max_results=20)
+
+            # Find the last message sent by the current user
+            last_message = None
+            for message in messages:
+                if message.get("personId") == me["id"]:
+                    last_message = message
+                    break
+
+            if last_message:
+                # Delete the message
+                client.delete_message(last_message["id"])
+                print("Last message deleted successfully.")
+            else:
+                print("No recent messages found from you in this room.")
+        except WebexAPIError as e:
+            print(f"Error deleting message: {e}")
+        return False
+
+    async def handle_files_command():
+        """Handle the /files command."""
+        try:
+            # Get files in the room
+            files = client.list_files(room["id"])
+
+            if not files:
+                print("\nNo files found in this room.")
+            else:
+                # Create a table to display files
+                try:
+                    # Get terminal width
+                    terminal_width = shutil.get_terminal_size().columns
+
+                    # Calculate column widths based on terminal width
+                    # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
+                    # Ensure minimum width of 80 characters to avoid errors on very small terminals
+                    effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+
+                    filename_width = int(effective_width * 0.30)
+                    type_width = int(effective_width * 0.15)
+                    size_width = int(effective_width * 0.10)
+                    created_width = int(effective_width * 0.15)
+                    id_width = effective_width - filename_width - type_width - size_width - created_width
+
+                    # Create a table
+                    table = Texttable(max_width=terminal_width)
+                    table.set_deco(Texttable.HEADER)
+                    table.set_cols_align(["l", "l", "l", "l", "l"])
+                    table.set_cols_width([filename_width, type_width, size_width, created_width, id_width])
+
+                    # Add header row
+                    table.add_row(["Filename", "Type", "Size", "Created", "ID"])
+
+                    # Add file rows
+                    for file_info in files:
+                        # Get file details
+                        file_id = file_info.get("id", "")
+                        filename = file_info.get("filename", "")
+                        content_type = file_info.get("contentType", "")
+
+                        # Format content type to be more readable
+                        if content_type:
+                            # Extract the main type (e.g., "application/pdf" -> "pdf")
+                            content_type_parts = content_type.split("/")
+                            if len(content_type_parts) > 1:
+                                content_type = content_type_parts[1].upper()
+                            else:
+                                content_type = content_type_parts[0].upper()
+
+                        # Format file size to be more readable
+                        size = file_info.get("size", 0)
+                        if size:
+                            # Convert to KB, MB, etc.
+                            if size < 1024:
+                                size_str = f"{size} B"
+                            elif size < 1024 * 1024:
+                                size_str = f"{size / 1024:.1f} KB"
+                            elif size < 1024 * 1024 * 1024:
+                                size_str = f"{size / (1024 * 1024):.1f} MB"
+                            else:
+                                size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
+                        else:
+                            size_str = ""
+
+                        # Format created date to be more readable
+                        created = file_info.get("created", "")
+                        if created:
+                            # Just take the date part (first 10 characters)
+                            created = created[:10]
+
+                        # Add row to table
+                        table.add_row([filename, content_type, size_str, created, file_id])
+
+                    # Print the table
+                    print(f"\nFiles in room '{room['title']}':")
+                    print(table.draw())
+                    print(
+                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
+                    )
+                except ImportError:
+                    # If texttable is not available, use simple formatting
+                    # Get terminal width
+                    terminal_width = shutil.get_terminal_size().columns
+
+                    # Calculate column widths based on terminal width
+                    # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
+                    # Ensure minimum width of 80 characters to avoid errors on very small terminals
+                    effective_width = max(terminal_width, 80)
+
+                    filename_width = int(effective_width * 0.30)
+                    type_width = int(effective_width * 0.15)
+                    size_width = int(effective_width * 0.10)
+                    created_width = int(effective_width * 0.15)
+                    id_width = effective_width - filename_width - type_width - size_width - created_width
+
+                    print(f"\nFiles in room '{room['title']}':")
+                    print("-" * terminal_width)
+
+                    # Create header format string with dynamic widths
+                    header_format = f"{{:<{filename_width}}} {{:<{type_width}}} {{:<{size_width}}} {{:<{created_width}}} {{:<{id_width}}}"
+                    print(header_format.format("Filename", "Type", "Size", "Created", "ID"))
+
+                    # Create separator line with dynamic widths
+                    separator_format = f"{{:-<{filename_width}}} {{:-<{type_width}}} {{:-<{size_width}}} {{:-<{created_width}}} {{:-<{id_width}}}"
+                    print(separator_format.format("", "", "", "", ""))
+                    for file_info in files:
+                        # Get file details
+                        file_id = file_info.get("id", "")
+                        filename = file_info.get("filename", "")
+                        content_type = file_info.get("contentType", "")
+
+                        # Format content type to be more readable
+                        if content_type:
+                            # Extract the main type (e.g., "application/pdf" -> "pdf")
+                            content_type_parts = content_type.split("/")
+                            if len(content_type_parts) > 1:
+                                content_type = content_type_parts[1].upper()
+                            else:
+                                content_type = content_type_parts[0].upper()
+
+                        # Format file size to be more readable
+                        size = file_info.get("size", 0)
+                        if size:
+                            # Convert to KB, MB, etc.
+                            if size < 1024:
+                                size_str = f"{size} B"
+                            elif size < 1024 * 1024:
+                                size_str = f"{size / 1024:.1f} KB"
+                            elif size < 1024 * 1024 * 1024:
+                                size_str = f"{size / (1024 * 1024):.1f} MB"
+                            else:
+                                size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
+                        else:
+                            size_str = ""
+
+                        # Format created date to be more readable
+                        created = file_info.get("created", "")
+                        if created:
+                            # Just take the date part (first 10 characters)
+                            created = created[:10]
+
+                        # Print file info using the dynamic format
+                        print(
+                            header_format.format(filename, content_type, size_str, created, file_id)
+                        )
+                    print(
+                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
+                    )
+        except WebexAPIError as e:
+            print(f"\nError retrieving files: {e}")
+        except Exception as e:
+            print(f"\nUnexpected error retrieving files: {e}")
+        return False
+
+    async def handle_slash_message(text):
+        """Handle messages that start with a slash."""
+        # Check if it's a message that starts with a slash (e.g., "//" or "/text")
+        if text.startswith("//"):
+            # Remove the first slash and send the rest as a message
+            message_text = text[1:]
+            try:
+                # Pass the text as both plain text and markdown
+                # The API will use markdown if it contains valid markdown
+                response = client.create_message(
+                    room["id"], message_text, markdown=message_text
+                )
+            except WebexAPIError as e:
+                print(f"Error sending message: {e}")
+        else:
+            print(f"Error: Unknown command '{text}'")
+        return False
+
+    async def handle_regular_message(text):
+        """Handle regular messages (not commands)."""
+        if text.strip():
+            try:
+                # Pass the text as both plain text and markdown
+                # The API will use markdown if it contains valid markdown
+                response = client.create_message(
+                    room["id"], text, markdown=text
+                )
+            except WebexAPIError as e:
+                print(f"Error sending message: {e}")
+        return False
+
     # Function to handle user input
     async def handle_user_input():
         """Handle user input in the interactive room session.
@@ -513,463 +1009,38 @@ async def room_session(room):
                     command_parts = command_with_args.split(maxsplit=1)
                     command = command_parts[0].lower()
 
+                    # Process commands
+                    should_break = False
                     if command == "exit":
-                        exit_event.set()
-                        break
+                        should_break = await handle_exit_command()
                     elif command == "help":
-                        print("\nAvailable commands:")
-                        print("  /exit - Exit the room")
-                        print("  /help - Show this help message")
-                        print("  /rooms [filter] - List all rooms, optionally filtered by text")
-                        print("  /members - List all members in the current room")
-                        print("  /detail - Display details about the current room")
-                        print("  /join <room_id> - Join another room")
-                        print(
-                            "  /files - List all files in the current room with their IDs"
-                        )
-                        print(
-                            "  /upload <filename> - Upload a file to the current room"
-                        )
-                        print(
-                            "  /download <filename> - Download a file from the current room (can use filename or ID)"
-                        )
-                        print(
-                            "  /delete - Delete the last message you sent in the room"
-                        )
-                        print(
-                            "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
-                        )
-                        print("\nTo send a message that starts with a slash, prefix it with another slash:")
-                        print("  //hello - Sends the message '/hello' to the room")
+                        should_break = await handle_help_command()
                     elif command == "rooms":
-                        # Check if there's additional text to filter rooms
-                        filter_text = ""
-                        if len(command_parts) > 1:
-                            filter_text = command_parts[1].strip().lower()
-
-                        # Get all rooms
-                        rooms = client.list_rooms()
-
-                        if not rooms:
-                            print("No rooms found.")
-                            continue
-
-                        # Filter rooms if filter_text is provided
-                        if filter_text:
-                            filtered_rooms = [r for r in rooms if filter_text in r['title'].lower()]
-
-                            if not filtered_rooms:
-                                print(f"\nNo rooms found matching '{filter_text}'.")
-                                continue
-
-                            # Display filtered rooms
-                            print(f"\nRooms matching '{filter_text}':")
-                            print("----------------")
-                            for i, r in enumerate(filtered_rooms, 1):
-                                print(f"{i}. {r['title']} (ID: {r['id']})")
-                        else:
-                            # No filter, display all rooms
-                            print("\nAvailable rooms:")
-                            print("----------------")
-                            for i, r in enumerate(rooms, 1):
-                                print(f"{i}. {r['title']} (ID: {r['id']})")
+                        should_break = await handle_rooms_command(command_parts)
                     elif command == "members":
-                        # List all members in the current room
-                        try:
-                            from texttable import Texttable
-
-                            # Get room members
-                            members = client.list_room_members(room["id"])
-
-                            if not members:
-                                print("\nNo members found in this room.")
-                            else:
-                                # Create a table
-                                table = Texttable()
-                                table.set_deco(Texttable.HEADER)
-                                table.set_cols_align(["l", "l", "l", "c"])
-                                table.set_cols_width([30, 30, 20, 10])
-
-                                # Add header row
-                                table.add_row(
-                                    ["Display Name", "Email", "Created", "Moderator"]
-                                )
-
-                                # Add member rows
-                                for member in members:
-                                    # Get person details
-                                    person_id = member.get("personId", "")
-                                    display_name = member.get(
-                                        "personDisplayName", "Unknown"
-                                    )
-                                    email = member.get("personEmail", "Unknown")
-                                    created = member.get("created", "Unknown")
-                                    is_moderator = (
-                                        "Yes"
-                                        if member.get("isModerator", False)
-                                        else "No"
-                                    )
-
-                                    # Format created date (if available)
-                                    if created != "Unknown":
-                                        # Just take the date part (first 10 characters)
-                                        created = created[:10]
-
-                                    # Add row to table
-                                    table.add_row(
-                                        [display_name, email, created, is_moderator]
-                                    )
-
-                                # Print the table
-                                print(f"\nMembers in room '{room['title']}':")
-                                print(table.draw())
-                        except ImportError:
-                            print(
-                                "\nError: texttable module not found. Please install it with 'pip install texttable'."
-                            )
-                        except WebexAPIError as e:
-                            print(f"\nError retrieving room members: {e}")
+                        should_break = await handle_members_command()
                     elif command == "detail":
-                        # Display details about the current room
-                        try:
-                            # Get the latest room details
-                            room_details = client.get_room(room["id"])
-
-                            # Get room members count
-                            members = client.list_room_members(room["id"])
-                            member_count = len(members)
-
-                            # Print room details
-                            print("\nRoom Details:")
-                            print(f"  Title: {room_details.get('title', 'Unknown')}")
-                            print(f"  ID: {room_details.get('id', 'Unknown')}")
-                            print(
-                                f"  Type: {room_details.get('type', 'Unknown').capitalize()}"
-                            )
-
-                            # Format and display creation date if available
-                            created = room_details.get("created", "Unknown")
-                            if created != "Unknown":
-                                # Just take the date part (first 10 characters)
-                                created = created[:10]
-                            print(f"  Created: {created}")
-
-                            # Display last activity if available
-                            last_activity = room_details.get("lastActivity", "Unknown")
-                            if last_activity != "Unknown":
-                                # Just take the date part (first 10 characters)
-                                last_activity = last_activity[:10]
-                            print(f"  Last Activity: {last_activity}")
-
-                            # Display team info if available
-                            if "teamId" in room_details:
-                                print(
-                                    f"  Team ID: {room_details.get('teamId', 'Unknown')}"
-                                )
-
-                            # Display member count
-                            print(f"  Member Count: {member_count}")
-
-                            # Display if the room is locked
-                            is_locked = (
-                                "Yes" if room_details.get("isLocked", False) else "No"
-                            )
-                            print(f"  Locked: {is_locked}")
-
-                        except WebexAPIError as e:
-                            print(f"\nError retrieving room details: {e}")
+                        should_break = await handle_detail_command()
                     elif command.isdigit() and 1 <= int(command) <= 10:
-                        # Retrieve and display the last n messages in the room
-                        num_messages = int(command)
-                        try:
-                            messages = client.list_messages(
-                                room["id"], max_results=num_messages
-                            )
-                            if not messages:
-                                print("\nNo messages found in this room.")
-                            else:
-                                print(f"\nLast {num_messages} messages:")
-                                # Messages are returned in reverse chronological order (newest first)
-                                # Display them in chronological order (oldest first)
-                                for message in reversed(messages):
-                                    # Skip messages without text
-                                    if "text" not in message:
-                                        continue
-
-                                    # Get sender info
-                                    try:
-                                        sender = client.get_person(message["personId"])
-                                        sender_name = sender.get(
-                                            "displayName", "Unknown"
-                                        )
-                                    except Exception:
-                                        sender_name = "Unknown"
-
-                                    # Format and print the message
-                                    # Use markdown content if available, otherwise fall back to text
-                                    message_text = message.get(
-                                        "markdown", message.get("text", "")
-                                    )
-                                    with patch_stdout():
-                                        print_formatted_text(
-                                            HTML(
-                                                f"<username>{sender_name}</username>: <message>{message_text}</message>"
-                                            ),
-                                            style=style,
-                                        )
-                        except WebexAPIError as e:
-                            print(f"Error retrieving messages: {e}")
-                    elif command == "join" and len(command_parts) > 1:
-                        # Exit current room and join new one
-                        # Use the original case for the room ID
-                        new_room_id = command_parts[1].strip()
-                        try:
-                            new_room = client.get_room(new_room_id)
-                            exit_event.set()
-                            break
-                        except WebexAPIError as e:
-                            print(f"Error joining room: {e}")
-                    elif command == "upload" and len(command_parts) > 1:
-                        # Upload a file to the current room
-                        file_path = command_parts[1].strip()
-                        if not file_path:
-                            print("Error: Please specify a filename to upload.")
-                        else:
-                            try:
-                                # Try to upload the file
-                                response = client.create_message_with_file(
-                                    room["id"], file_path
-                                )
-                                print(
-                                    f"File '{os.path.basename(file_path)}' uploaded successfully."
-                                )
-                            except FileNotFoundError:
-                                print(f"Error: File not found: {file_path}")
-                            except WebexAPIError as e:
-                                print(f"Error uploading file: {e}")
-                            except Exception as e:
-                                print(f"Unexpected error uploading file: {e}")
-                    elif command == "download" and len(command_parts) > 1:
-                        # Download a file from the current room
-                        filename = command_parts[1].strip()
-                        if not filename:
-                            print("Error: Please specify a filename to download.")
-                        else:
-                            try:
-                                # Try to download the file
-                                save_path = client.download_file(room["id"], filename)
-                                print(
-                                    f"File '{filename}' downloaded successfully to '{save_path}'."
-                                )
-                            except FileNotFoundError:
-                                print(f"Error: File not found in room: {filename}")
-                            except WebexAPIError as e:
-                                print(f"Error downloading file: {e}")
-                            except Exception as e:
-                                print(f"Unexpected error downloading file: {e}")
+                        should_break = await handle_numeric_command(command)
+                    elif command == "join":
+                        should_break = await handle_join_command(command_parts)
+                    elif command == "upload":
+                        should_break = await handle_upload_command(command_parts)
+                    elif command == "download":
+                        should_break = await handle_download_command(command_parts)
                     elif command == "delete":
-                        # Delete the last message sent by the user in the room
-                        try:
-                            # Get the last few messages in the room
-                            messages = client.list_messages(room["id"], max_results=20)
-
-                            # Find the last message sent by the current user
-                            last_message = None
-                            for message in messages:
-                                if message.get("personId") == me["id"]:
-                                    last_message = message
-                                    break
-
-                            if last_message:
-                                # Delete the message
-                                client.delete_message(last_message["id"])
-                                print("Last message deleted successfully.")
-                            else:
-                                print("No recent messages found from you in this room.")
-                        except WebexAPIError as e:
-                            print(f"Error deleting message: {e}")
+                        should_break = await handle_delete_command()
                     elif command == "files":
-                        # List all files in the current room
-                        try:
-                            # Get files in the room
-                            files = client.list_files(room["id"])
-
-                            if not files:
-                                print("\nNo files found in this room.")
-                            else:
-                                # Create a table to display files
-                                try:
-                                    from texttable import Texttable
-
-                                    # Get terminal width
-                                    terminal_width = shutil.get_terminal_size().columns
-
-                                    # Calculate column widths based on terminal width
-                                    # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
-                                    # Ensure minimum width of 80 characters to avoid errors on very small terminals
-                                    effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
-
-                                    filename_width = int(effective_width * 0.30)
-                                    type_width = int(effective_width * 0.15)
-                                    size_width = int(effective_width * 0.10)
-                                    created_width = int(effective_width * 0.15)
-                                    id_width = effective_width - filename_width - type_width - size_width - created_width
-
-                                    # Create a table
-                                    table = Texttable(max_width=terminal_width)
-                                    table.set_deco(Texttable.HEADER)
-                                    table.set_cols_align(["l", "l", "l", "l", "l"])
-                                    table.set_cols_width([filename_width, type_width, size_width, created_width, id_width])
-
-                                    # Add header row
-                                    table.add_row(["Filename", "Type", "Size", "Created", "ID"])
-
-                                    # Add file rows
-                                    for file_info in files:
-                                        # Get file details
-                                        file_id = file_info.get("id", "")
-                                        filename = file_info.get("filename", "")
-                                        content_type = file_info.get("contentType", "")
-
-                                        # Format content type to be more readable
-                                        if content_type:
-                                            # Extract the main type (e.g., "application/pdf" -> "pdf")
-                                            content_type_parts = content_type.split("/")
-                                            if len(content_type_parts) > 1:
-                                                content_type = content_type_parts[1].upper()
-                                            else:
-                                                content_type = content_type_parts[0].upper()
-
-                                        # Format file size to be more readable
-                                        size = file_info.get("size", 0)
-                                        if size:
-                                            # Convert to KB, MB, etc.
-                                            if size < 1024:
-                                                size_str = f"{size} B"
-                                            elif size < 1024 * 1024:
-                                                size_str = f"{size / 1024:.1f} KB"
-                                            elif size < 1024 * 1024 * 1024:
-                                                size_str = f"{size / (1024 * 1024):.1f} MB"
-                                            else:
-                                                size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
-                                        else:
-                                            size_str = ""
-
-                                        # Format created date to be more readable
-                                        created = file_info.get("created", "")
-                                        if created:
-                                            # Just take the date part (first 10 characters)
-                                            created = created[:10]
-
-                                        # Add row to table
-                                        table.add_row([filename, content_type, size_str, created, file_id])
-
-                                    # Print the table
-                                    print(f"\nFiles in room '{room['title']}':")
-                                    print(table.draw())
-                                    print(
-                                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
-                                    )
-                                except ImportError:
-                                    # If texttable is not available, use simple formatting
-                                    # Get terminal width
-                                    terminal_width = shutil.get_terminal_size().columns
-
-                                    # Calculate column widths based on terminal width
-                                    # Use proportions: filename (30%), type (15%), size (10%), created (15%), ID (30%)
-                                    # Ensure minimum width of 80 characters to avoid errors on very small terminals
-                                    effective_width = max(terminal_width, 80)
-
-                                    filename_width = int(effective_width * 0.30)
-                                    type_width = int(effective_width * 0.15)
-                                    size_width = int(effective_width * 0.10)
-                                    created_width = int(effective_width * 0.15)
-                                    id_width = effective_width - filename_width - type_width - size_width - created_width
-
-                                    print(f"\nFiles in room '{room['title']}':")
-                                    print("-" * terminal_width)
-
-                                    # Create header format string with dynamic widths
-                                    header_format = f"{{:<{filename_width}}} {{:<{type_width}}} {{:<{size_width}}} {{:<{created_width}}} {{:<{id_width}}}"
-                                    print(header_format.format("Filename", "Type", "Size", "Created", "ID"))
-
-                                    # Create separator line with dynamic widths
-                                    separator_format = f"{{:-<{filename_width}}} {{:-<{type_width}}} {{:-<{size_width}}} {{:-<{created_width}}} {{:-<{id_width}}}"
-                                    print(separator_format.format("", "", "", "", ""))
-                                    for file_info in files:
-                                        # Get file details
-                                        file_id = file_info.get("id", "")
-                                        filename = file_info.get("filename", "")
-                                        content_type = file_info.get("contentType", "")
-
-                                        # Format content type to be more readable
-                                        if content_type:
-                                            # Extract the main type (e.g., "application/pdf" -> "pdf")
-                                            content_type_parts = content_type.split("/")
-                                            if len(content_type_parts) > 1:
-                                                content_type = content_type_parts[1].upper()
-                                            else:
-                                                content_type = content_type_parts[0].upper()
-
-                                        # Format file size to be more readable
-                                        size = file_info.get("size", 0)
-                                        if size:
-                                            # Convert to KB, MB, etc.
-                                            if size < 1024:
-                                                size_str = f"{size} B"
-                                            elif size < 1024 * 1024:
-                                                size_str = f"{size / 1024:.1f} KB"
-                                            elif size < 1024 * 1024 * 1024:
-                                                size_str = f"{size / (1024 * 1024):.1f} MB"
-                                            else:
-                                                size_str = f"{size / (1024 * 1024 * 1024):.1f} GB"
-                                        else:
-                                            size_str = ""
-
-                                        # Format created date to be more readable
-                                        created = file_info.get("created", "")
-                                        if created:
-                                            # Just take the date part (first 10 characters)
-                                            created = created[:10]
-
-                                        # Print file info using the dynamic format
-                                        print(
-                                            header_format.format(filename, content_type, size_str, created, file_id)
-                                        )
-                                    print(
-                                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
-                                    )
-                        except WebexAPIError as e:
-                            print(f"\nError retrieving files: {e}")
-                        except Exception as e:
-                            print(f"\nUnexpected error retrieving files: {e}")
+                        should_break = await handle_files_command()
                     else:
-                        # If the text starts with a slash but isn't a known command
-                        if text.startswith("/"):
-                            # Check if it's a message that starts with a slash (e.g., "//" or "/text")
-                            if text.startswith("//"):
-                                # Remove the first slash and send the rest as a message
-                                message_text = text[1:]
-                                try:
-                                    # Pass the text as both plain text and markdown
-                                    # The API will use markdown if it contains valid markdown
-                                    response = client.create_message(
-                                        room["id"], message_text, markdown=message_text
-                                    )
-                                except WebexAPIError as e:
-                                    print(f"Error sending message: {e}")
-                            else:
-                                print(f"Error: Unknown command '{text}'")
+                        should_break = await handle_slash_message(text)
+
+                    if should_break:
+                        break
                 # Otherwise, send the message to the room
-                elif text.strip():
-                    try:
-                        # Pass the text as both plain text and markdown
-                        # The API will use markdown if it contains valid markdown
-                        response = client.create_message(
-                            room["id"], text, markdown=text
-                        )
-                    except WebexAPIError as e:
-                        print(f"Error sending message: {e}")
+                else:
+                    await handle_regular_message(text)
         except Exception:
             exit_event.set()
 
