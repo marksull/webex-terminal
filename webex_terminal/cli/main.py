@@ -609,6 +609,9 @@ async def room_session(room):
             "  /download <filename> - Download a file from the current room (can use filename or ID)"
         )
         print(
+            "  /open <filename> - Download and open a file from the current room with the default application"
+        )
+        print(
             "  /delete - Delete the last message you sent in the room"
         )
         print(
@@ -879,6 +882,43 @@ async def room_session(room):
                 print(f"Unexpected error downloading file: {e}")
         return False
 
+    async def handle_open_command(command_parts):
+        """Handle the /open command."""
+        if len(command_parts) <= 1:
+            print("Error: Please specify a filename to open.")
+            return False
+
+        filename = command_parts[1].strip()
+        if not filename:
+            print("Error: Please specify a filename to open.")
+        else:
+            try:
+                # Try to download the file
+                save_path = client.download_file(room["id"], filename)
+                print(
+                    f"File '{filename}' downloaded successfully to '{save_path}'."
+                )
+
+                # Open the file with the default application based on the platform
+                try:
+                    if platform.system() == 'Windows':
+                        os.startfile(save_path)
+                    elif platform.system() == 'Darwin':  # macOS
+                        subprocess.run(['open', save_path], check=True)
+                    else:  # Linux and other Unix-like systems
+                        subprocess.run(['xdg-open', save_path], check=True)
+                    print(f"Opened file '{save_path}' with the default application.")
+                except Exception as e:
+                    print(f"Error opening file: {e}")
+
+            except FileNotFoundError:
+                print(f"Error: File not found in room: {filename}")
+            except WebexAPIError as e:
+                print(f"Error downloading file: {e}")
+            except Exception as e:
+                print(f"Unexpected error downloading file: {e}")
+        return False
+
     async def handle_delete_command():
         """Handle the /delete command."""
         try:
@@ -980,7 +1020,10 @@ async def room_session(room):
                     print(f"\nFiles in room '{room['title']}':")
                     print(table.draw())
                     print(
-                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
+                        "\nUse /download <filename> to download a file or /open <filename> to download and open it."
+                    )
+                    print(
+                        "You can use either the filename or the ID for both commands."
                     )
                 except ImportError:
                     # If texttable is not available, use simple formatting
@@ -1049,7 +1092,10 @@ async def room_session(room):
                             header_format.format(filename, content_type, size_str, created, file_id)
                         )
                     print(
-                        "\nUse /download <filename> to download a file. You can use either the filename or the ID."
+                        "\nUse /download <filename> to download a file or /open <filename> to download and open it."
+                    )
+                    print(
+                        "You can use either the filename or the ID for both commands."
                     )
         except WebexAPIError as e:
             print(f"\nError retrieving files: {e}")
@@ -1207,6 +1253,8 @@ async def room_session(room):
                         should_break = await handle_upload_command(command_parts)
                     elif command == "download":
                         should_break = await handle_download_command(command_parts)
+                    elif command == "open":
+                        should_break = await handle_open_command(command_parts)
                     elif command == "delete":
                         should_break = await handle_delete_command()
                     elif command == "files":
