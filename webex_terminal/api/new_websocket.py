@@ -34,6 +34,7 @@ class WebexWebsocket:
         self.reconnection_count = 0
         self.max_reconnection_count = 5
         self.HYDRA_PREFIX = "ciscospark://us"
+        self.last_error = None
 
     def reset_reconnection_count(self):
         """Reset the reconnection counter."""
@@ -41,31 +42,58 @@ class WebexWebsocket:
 
     async def _register_device(self) -> Dict:
         """Register a device with Webex to receive websocket events."""
-        # Get the current user's info
-        me = self.client.get_me()
+        try:
+            # Get the current user's info
+            me = self.client.get_me()
 
-        # Create a device registration
-        data = {
-            'deviceName': 'Webex Terminal',
-            'deviceType': 'DESKTOP',
-            'localizedModel': 'Desktop',
-            'model': 'Desktop',
-            'name': f"Webex Terminal - {me['displayName']}",
-            'systemName': 'Python',
-            'systemVersion': '1.0',
-        }
+            # Create a device registration
+            data = {
+                'deviceName': 'Webex Terminal',
+                'deviceType': 'DESKTOP',
+                'localizedModel': 'Desktop',
+                'model': 'Desktop',
+                'name': f"Webex Terminal - {me['displayName']}",
+                'systemName': 'Python',
+                'systemVersion': '1.0',
+            }
 
-        # Use the specific URL for device registration
-        url = "https://wdm-a.wbx2.com/wdm/api/v1/devices"
-        headers = self.client._get_headers()
+            # Use the specific URL for device registration
+            url = "https://wdm-a.wbx2.com/wdm/api/v1/devices"
+            headers = self.client._get_headers()
 
-        # Make the direct API request
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
+            # Make the direct API request
+            print(f"Registering device with Webex...")
+            response = requests.post(url, headers=headers, json=data)
 
-        result = response.json()
-        self.device_info = result
-        return result
+            # Check for HTTP errors
+            try:
+                response.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                # Get more details from the response if available
+                error_msg = str(e)
+                try:
+                    error_json = response.json()
+                    if 'message' in error_json:
+                        error_msg = f"{error_msg} - {error_json['message']}"
+                except:
+                    pass
+
+                print(f"Device registration failed: {error_msg}")
+                # Store the error and re-raise
+                self.last_error = e
+                raise
+
+            result = response.json()
+            self.device_info = result
+            print("Device registration successful")
+            return result
+
+        except Exception as e:
+            # Store the error for reference
+            self.last_error = e
+            print(f"Device registration error: {e.__class__.__name__}: {str(e)}")
+            # Re-raise the exception
+            raise
 
     async def _get_device_info(self) -> Dict:
         """Get the device info, registering a new device if necessary."""
@@ -94,6 +122,10 @@ class WebexWebsocket:
             return True
         except Exception as e:
             self.running = False
+            # Print detailed error information for debugging
+            print(f"Websocket connection error: {e.__class__.__name__}: {str(e)}")
+            # Store the last error for reference
+            self.last_error = e
             return False
 
     async def _cleanup_resources(self):
@@ -176,12 +208,19 @@ class WebexWebsocket:
 
                 except asyncio.CancelledError:
                     raise
-                except Exception:
+                except Exception as e:
+                    # Store the error for reference
+                    self.last_error = e
+
+                    # Print detailed error information for debugging
+                    print(f"Websocket message loop error: {e.__class__.__name__}: {str(e)}")
+
                     # Increment reconnection count
                     self.reconnection_count += 1
 
                     if self.reconnection_count >= self.max_reconnection_count:
                         print(f"Maximum reconnection attempts ({self.max_reconnection_count}) reached. Giving up.")
+                        print(f"Last error: {e.__class__.__name__}: {str(e)}")
                         break
 
                     # Wait before retrying
@@ -288,7 +327,12 @@ async def create_websocket_client() -> WebexWebsocket:
 
         success = await client.connect()
         if not success:
-            raise Exception("Failed to connect to Webex websocket")
+            # Check if we have a specific error stored
+            if hasattr(client, 'last_error') and client.last_error:
+                error_details = f"{client.last_error.__class__.__name__}: {str(client.last_error)}"
+                raise Exception(f"Failed to connect to Webex websocket: {error_details}")
+            else:
+                raise Exception("Failed to connect to Webex websocket. Please check your network connection and authentication.")
 
         # Yield control back to the event loop after connecting
         await asyncio.sleep(0)
@@ -300,5 +344,11 @@ async def create_websocket_client() -> WebexWebsocket:
             await client.disconnect()
         except Exception:
             pass
-        # Re-raise the original exception
-        raise
+
+        # Re-raise with more detailed error information
+        if str(e).startswith("Failed to connect to Webex websocket"):
+            # This is already our detailed error, just re-raise it
+            raise
+        else:
+            # This is some other error, include the details
+            raise Exception(f"Failed to connect to Webex websocket: {str(e)}")

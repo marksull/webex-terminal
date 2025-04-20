@@ -257,6 +257,18 @@ def join_room(room_id, name):
     except WebexAPIError as e:
         click.echo(f"Error: {e}")
         sys.exit(1)
+    except Exception as e:
+        # Handle other exceptions, including websocket connection errors
+        if "Failed to connect to Webex websocket" in str(e):
+            click.echo(f"Error: {e}")
+            click.echo("\nTroubleshooting tips:")
+            click.echo("1. Check your internet connection")
+            click.echo("2. Verify your authentication by running 'webex-terminal auth' again")
+            click.echo("3. Check if Webex services are experiencing any outages")
+            click.echo("4. Try again in a few minutes")
+        else:
+            click.echo(f"Error: {e}")
+        sys.exit(1)
     except KeyboardInterrupt:
         click.echo("\nExiting...")
 
