@@ -359,6 +359,9 @@ async def room_session(room):
     # Get user info
     me = client.get_me()
 
+    # Debug mode flag - controls whether to display message payload for debugging
+    debug_mode = False
+
     # Create custom key bindings
     kb = KeyBindings()
 
@@ -536,8 +539,9 @@ async def room_session(room):
                     except Exception as e:
                         file_info += f"\n  Error processing attachment: {e}"
 
-                # Add debug information
-                file_info += f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
+                # Add debug information if debug mode is enabled
+                if debug_mode:
+                    file_info += f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
 
             with patch_stdout():
                 # Format message with sender name as prefix, keeping the styling
@@ -597,6 +601,9 @@ async def room_session(room):
         )
         print(
             "  /delete - Delete the last message you sent in the room"
+        )
+        print(
+            "  /debug - Toggle debug mode to show/hide message payloads"
         )
         print(
             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
@@ -1035,6 +1042,24 @@ async def room_session(room):
             print(f"\nUnexpected error retrieving files: {e}")
         return False
 
+    async def handle_debug_command():
+        """Handle the /debug command.
+
+        This function toggles the debug mode, which controls whether message payloads
+        are displayed for debugging purposes.
+        """
+        nonlocal debug_mode
+        # Toggle debug mode
+        debug_mode = not debug_mode
+
+        # Provide feedback to the user
+        if debug_mode:
+            print("\nDebug mode enabled. Message payloads will be displayed.")
+        else:
+            print("\nDebug mode disabled. Message payloads will not be displayed.")
+
+        return False
+
     async def handle_slash_message(text):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
@@ -1132,6 +1157,8 @@ async def room_session(room):
                         should_break = await handle_delete_command()
                     elif command == "files":
                         should_break = await handle_files_command()
+                    elif command == "debug":
+                        should_break = await handle_debug_command()
                     else:
                         should_break = await handle_slash_message(text)
 
