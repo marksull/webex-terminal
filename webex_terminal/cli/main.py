@@ -631,7 +631,7 @@ async def room_session(room):
         print("  /members - List all members in the current room")
         print("  /add <email_address> - Add a user to the current room")
         print("  /details - Display details about the current room")
-        print("  /join <room_id> - Join another room")
+        print("  /join <room_id or name> - Join another room by ID, exact name, or partial name")
         print("  /files - List all files in the current room with their IDs")
         print("  /links - List all links shared in the current room")
         print("  /upload <filename> - Upload a file to the current room")
@@ -1068,23 +1068,29 @@ async def room_session(room):
         return False
 
     async def handle_join_command(command_parts):
-        """Handle the /join command."""
+        """Handle the /join command.
+
+        The command accepts a room ID, exact room name, or partial room name.
+        If multiple rooms match the partial name, a list of matching rooms is displayed
+        for the user to choose from.
+        """
+        nonlocal room
         if len(command_parts) <= 1:
-            print("Error: Please specify a room ID to join.")
+            print("Error: Please specify a room ID or name to join.")
             return False
 
-        # Use the original case for the room ID
-        new_room_id = command_parts[1].strip()
+        # Use the original case for the room ID or name
+        room_identifier = command_parts[1].strip()
+
+        # First try to get the room by ID
         try:
-            # Get the new room details
-            temp_room = client.get_room(new_room_id)
+            temp_room = client.get_room(room_identifier)
 
             # Set the new room ID on the existing websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
             websocket.set_room(room_id)
 
             # Update the room variable to the new room
-            nonlocal room
             room = temp_room
 
             # Print a message indicating the room change
@@ -1092,8 +1098,80 @@ async def room_session(room):
 
             # No need to exit the current room session
             return False
-        except WebexAPIError as e:
+        except WebexAPIError:
+            # If room ID doesn't exist, try to find by name
+            pass
+
+        # Try to find room by exact name
+        temp_room = client.get_room_by_name(room_identifier)
+        if temp_room:
+            # Set the new room ID on the existing websocket client
+            room_id = temp_room.get("globalId", temp_room["id"])
+            websocket.set_room(room_id)
+
+            # Update the room variable to the new room
+            room = temp_room
+
+            # Print a message indicating the room change
+            print(f"Joined room: {temp_room['title']}")
+
+            # No need to exit the current room session
+            return False
+
+        # Try to find rooms by partial name
+        matching_rooms = client.search_rooms_by_name(room_identifier)
+        if not matching_rooms:
+            print(f"No rooms found matching '{room_identifier}'.")
+            return False
+
+        if len(matching_rooms) == 1:
+            # Only one match, join it directly
+            temp_room = matching_rooms[0]
+
+            # Set the new room ID on the existing websocket client
+            room_id = temp_room.get("globalId", temp_room["id"])
+            websocket.set_room(room_id)
+
+            # Update the room variable to the new room
+            room = temp_room
+
+            # Print a message indicating the room change
+            print(f"Joined room: {temp_room['title']}")
+
+            # No need to exit the current room session
+            return False
+
+        # Multiple matches, display them and let the user choose
+        print(f"Multiple rooms match '{room_identifier}':")
+        for i, r in enumerate(matching_rooms, 1):
+            print(f"{i}. {r['title']}")
+
+        try:
+            selection = input("Enter room number to join (or press Enter to cancel): ")
+            if not selection:
+                return False
+
+            selection_index = int(selection) - 1
+            if selection_index < 0 or selection_index >= len(matching_rooms):
+                print("Invalid selection.")
+                return False
+
+            temp_room = matching_rooms[selection_index]
+
+            # Set the new room ID on the existing websocket client
+            room_id = temp_room.get("globalId", temp_room["id"])
+            websocket.set_room(room_id)
+
+            # Update the room variable to the new room
+            room = temp_room
+
+            # Print a message indicating the room change
+            print(f"Joined room: {temp_room['title']}")
+        except ValueError:
+            print("Invalid selection.")
+        except Exception as e:
             print(f"Error joining room: {e}")
+
         return False
 
     async def handle_upload_command(command_parts):

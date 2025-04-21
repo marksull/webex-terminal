@@ -273,6 +273,29 @@ class WebexClient:
                 return room
         return None
 
+    def search_rooms_by_name(self, name: str) -> List[Dict]:
+        """Search for rooms by partial name.
+
+        This method searches for Webex rooms whose names contain the specified string.
+        The search is case-insensitive.
+
+        Args:
+            name (str): Partial name to search for.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing information about a matching room.
+                       Returns an empty list if no rooms match the search.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        rooms = self.list_rooms()
+        matching_rooms = []
+        for room in rooms:
+            if name.lower() in room["title"].lower():
+                matching_rooms.append(room)
+        return matching_rooms
+
     def create_message(self, room_id: str, text: str, markdown: str = None) -> Dict:
         """Send a message to a room.
 
