@@ -626,6 +626,7 @@ async def room_session(room):
         print("  /exit - Exit the room")
         print("  /help - Show this help message")
         print("  /rooms [filter] - List all rooms, optionally filtered by text")
+        print("  /teams [filter] - List all teams that you are a member of, optionally filtered by text")
         print("  /members - List all members in the current room")
         print("  /details - Display details about the current room")
         print("  /join <room_id> - Join another room")
@@ -694,6 +695,52 @@ async def room_session(room):
             print("----------------")
             for i, r in enumerate(rooms, 1):
                 print(f"{i}. {r['title']} (ID: {r['id']})")
+        return False
+
+    async def handle_teams_command(command_parts):
+        """Handle the /teams command.
+
+        This function lists all Webex teams that the user is a member of,
+        optionally filtered by text.
+
+        Args:
+            command_parts (list): The command split into parts, where command_parts[1]
+                                 may contain filter text if provided.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        # Check if there's additional text to filter teams
+        filter_text = ""
+        if len(command_parts) > 1:
+            filter_text = command_parts[1].strip().lower()
+
+        # Get all teams
+        teams = client.list_teams()
+
+        if not teams:
+            print("No teams found.")
+            return False
+
+        # Filter teams if filter_text is provided
+        if filter_text:
+            filtered_teams = [t for t in teams if filter_text in t["name"].lower()]
+
+            if not filtered_teams:
+                print(f"\nNo teams found matching '{filter_text}'.")
+                return False
+
+            # Display filtered teams
+            print(f"\nTeams matching '{filter_text}':")
+            print("----------------")
+            for i, t in enumerate(filtered_teams, 1):
+                print(f"{i}. {t['name']} (ID: {t['id']})")
+        else:
+            # No filter, display all teams
+            print("\nAvailable teams:")
+            print("----------------")
+            for i, t in enumerate(teams, 1):
+                print(f"{i}. {t['name']} (ID: {t['id']})")
         return False
 
     async def handle_members_command():
@@ -1516,6 +1563,8 @@ async def room_session(room):
                         should_break = await handle_sound_command()
                     elif command == "links":
                         should_break = await handle_links_command()
+                    elif command == "teams":
+                        should_break = await handle_teams_command(command_parts)
                     elif command == "logout":
                         should_break = await handle_logout_command()
                     else:

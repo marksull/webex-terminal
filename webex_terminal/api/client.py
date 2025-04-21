@@ -831,6 +831,25 @@ class WebexClient:
 
         return save_path
 
+    def list_teams(self, max_results: int = 100) -> List[Dict]:
+        """List all teams the user is a member of.
+
+        This method retrieves a list of all Webex teams that the authenticated
+        user is a member of, up to the specified maximum number of results.
+
+        Args:
+            max_results (int, optional): Maximum number of teams to return. Defaults to 100.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing information about a team.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        params = {"max": max_results}
+        response = self._request("GET", "teams", params=params)
+        return response.get("items", [])
+
     def download_file(self, room_id: str, filename: str, save_path: str = None) -> str:
         """Download a file from a room.
 
