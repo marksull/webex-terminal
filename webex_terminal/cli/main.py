@@ -1069,7 +1069,6 @@ async def room_session(room):
 
     async def handle_join_command(command_parts):
         """Handle the /join command."""
-        nonlocal new_room
         if len(command_parts) <= 1:
             print("Error: Please specify a room ID to join.")
             return False
@@ -1077,9 +1076,22 @@ async def room_session(room):
         # Use the original case for the room ID
         new_room_id = command_parts[1].strip()
         try:
-            new_room = client.get_room(new_room_id)
-            exit_event.set()
-            return True
+            # Get the new room details
+            temp_room = client.get_room(new_room_id)
+
+            # Set the new room ID on the existing websocket client
+            room_id = temp_room.get("globalId", temp_room["id"])
+            websocket.set_room(room_id)
+
+            # Update the room variable to the new room
+            nonlocal room
+            room = temp_room
+
+            # Print a message indicating the room change
+            print(f"Joined room: {temp_room['title']}")
+
+            # No need to exit the current room session
+            return False
         except WebexAPIError as e:
             print(f"Error joining room: {e}")
         return False
