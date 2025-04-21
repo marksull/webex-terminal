@@ -905,6 +905,39 @@ class WebexClient:
 
         return matching_rooms
 
+    def remove_user_from_room(self, room_id: str, email: str) -> Dict:
+        """Remove a user from a room.
+
+        This method removes a user from a specified Webex room using their email address.
+        It first finds the membership ID for the user in the room, then deletes that membership.
+
+        Args:
+            room_id (str): ID of the room to remove the user from.
+            email (str): Email address of the user to remove.
+
+        Returns:
+            Dict: A dictionary containing information about the deleted membership.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request or if the user is not found in the room.
+        """
+        # Get all memberships for the room
+        memberships = self.list_room_members(room_id)
+
+        # Find the membership for the specified email
+        membership_id = None
+        for membership in memberships:
+            if membership.get("personEmail", "").lower() == email.lower():
+                membership_id = membership.get("id")
+                break
+
+        if not membership_id:
+            raise WebexAPIError(f"User with email '{email}' not found in the room.")
+
+        # Delete the membership
+        response = self._request("DELETE", f"memberships/{membership_id}")
+        return response
+
     def download_file(self, room_id: str, filename: str, save_path: str = None) -> str:
         """Download a file from a room.
 

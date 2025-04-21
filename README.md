@@ -86,6 +86,7 @@ While in a room, you can use the following commands:
 - `/download <filename>` - Download a file from the current room (can use filename or ID)
 - `/open <filename>` - Download and open a file from the current room with the default application
 - `/delete` - Delete the last message you sent in the room
+- `/remove <email_address>` - Remove a user from the current room
 - `/debug` - Toggle debug mode to show/hide message payloads
 - `/sound` - Toggle notification sound for new messages
 - `/logout` - Log out from Webex by deleting the token file

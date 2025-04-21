@@ -1163,8 +1163,47 @@ async def room_session(room):
                 print(f"Unexpected error downloading file: {e}")
         return False
 
-    async def handle_delete_command():
-        """Handle the /delete command."""
+    async def handle_remove_command(command_parts):
+        """Handle the /remove command.
+
+        This function removes a user from the current room using their email address.
+
+        Args:
+            command_parts (list): The command split into parts, where command_parts[1]
+                                 contains the email address of the user to remove.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        if len(command_parts) <= 1:
+            print("Error: Please specify an email address to remove.")
+            print("Usage: /remove <email_address>")
+            return False
+
+        email = command_parts[1].strip()
+        if not email:
+            print("Error: Please specify an email address to remove.")
+            return False
+
+        try:
+            # Remove the user from the room
+            client.remove_user_from_room(room["id"], email)
+            print(f"User with email '{email}' has been removed from the room.")
+        except WebexAPIError as e:
+            print(f"Error removing user from room: {e}")
+        return False
+
+    async def handle_delete_command(command_parts=None):
+        """Handle the /delete command.
+
+        This function deletes the last message sent by the current user in the room.
+
+        Args:
+            command_parts (list, optional): Not used, kept for compatibility.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
         try:
             # Get the last few messages in the room
             messages = client.list_messages(room["id"], max_results=20)
@@ -1659,6 +1698,8 @@ async def room_session(room):
                         should_break = await handle_open_command(command_parts)
                     elif command == "delete":
                         should_break = await handle_delete_command()
+                    elif command == "remove":
+                        should_break = await handle_remove_command(command_parts)
                     elif command == "files":
                         should_break = await handle_files_command()
                     elif command == "debug":
