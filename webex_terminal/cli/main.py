@@ -642,6 +642,7 @@ async def room_session(room):
         print(
             "  /open <filename> - Download and open a file from the current room with the default application"
         )
+        print("  /person <text> - Search for people by email (if text contains @) or display name")
         print("  /delete - Delete the last message you sent in the room")
         print("  /debug - Toggle debug mode to show/hide message payloads")
         print("  /sound - Toggle notification sound for new messages")
@@ -1774,6 +1775,75 @@ async def room_session(room):
         exit_event.set()
         return True
 
+    async def handle_person_command(command_parts):
+        """Handle the /person command.
+
+        This function searches for people in the Webex organization using either
+        email address (if the search text contains @) or display name.
+
+        Args:
+            command_parts (list): The command split into parts, where command_parts[1]
+                                 contains the search text.
+
+        Returns:
+            bool: False to indicate the session should continue.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        # Check if search text is provided
+        if len(command_parts) < 2:
+            print("Error: Search text is required.")
+            print("Usage: /person <text>")
+            return False
+
+        search_text = command_parts[1].strip()
+
+        try:
+            # Determine whether to search by email or display name
+            if "@" in search_text:
+                # Search by email
+                people = client.list_people(email=search_text)
+                search_type = "email"
+            else:
+                # Search by display name
+                people = client.list_people(display_name=search_text)
+                search_type = "display name"
+
+            if not people:
+                print(f"\nNo people found matching {search_type} '{search_text}'.")
+                return False
+
+            # Create a table
+            table = Texttable()
+            table.set_deco(Texttable.HEADER)
+            table.set_cols_align(["l", "l", "l", "l"])
+            table.set_cols_width([30, 30, 30, 20])
+
+            # Add header row
+            table.add_row(["Display Name", "Email", "Title", "Status"])
+
+            # Add people rows
+            for person in people:
+                display_name = person.get("displayName", "Unknown")
+                email = person.get("emails", ["Unknown"])[0] if person.get("emails") else "Unknown"
+                title = person.get("title", "Unknown")
+                status = person.get("status", "Unknown")
+
+                # Add row to table
+                table.add_row([display_name, email, title, status])
+
+            # Print the table
+            print(f"\nPeople matching {search_type} '{search_text}':")
+            print(table.draw())
+
+        except ImportError:
+            print("\nError: texttable module not found. Please install it with 'pip install texttable'.")
+        except WebexAPIError as e:
+            print(f"\nError searching for people: {e}")
+
+        return False
+
     async def handle_slash_message(text):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
@@ -1889,6 +1959,8 @@ async def room_session(room):
                         should_break = await handle_spaces_command(command_parts)
                     elif command == "logout":
                         should_break = await handle_logout_command()
+                    elif command == "person":
+                        should_break = await handle_person_command(command_parts)
                     else:
                         should_break = await handle_slash_message(text)
 
