@@ -1,5 +1,8 @@
 # Webex Terminal
 
+> This was an experimental project to gain experience using JetBrains Junie. Every single line of code and documentation (except this very introduction) was written using Junie, and I will attempt to maintain it using Junie.
+
+
 A terminal client for Cisco Webex that allows you to join and interact with Webex rooms directly from your terminal.
 
 ## Features
