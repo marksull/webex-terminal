@@ -17,7 +17,7 @@ setup(
         ],
     },
     author="Your Name",
-    author_email="your.email@example.com",
+    author_email="mark@sullivans.id.au",
     description="A terminal client for Cisco Webex",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
