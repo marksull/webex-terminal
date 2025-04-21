@@ -75,6 +75,8 @@ While in a room, you can use the following commands:
 - `/exit` - Exit the room
 - `/help` - Show this help message
 - `/rooms [filter]` - List all rooms, optionally filtered by text
+- `/teams [filter]` - List all teams that you are a member of, optionally filtered by text
+- `/spaces <team name or ID>` - List all spaces (rooms) in a specific Webex team
 - `/members` - List all members in the current room
 - `/details` - Display details about the current room
 - `/join <room_id>` - Join another room
