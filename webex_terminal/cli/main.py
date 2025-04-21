@@ -643,6 +643,7 @@ async def room_session(room):
             "  /open <filename> - Download and open a file from the current room with the default application"
         )
         print("  /person <text> - Search for people by email (if text contains @) or display name")
+        print("  /whoami - Display detailed information about your Webex user account")
         print("  /delete - Delete the last message you sent in the room")
         print("  /debug - Toggle debug mode to show/hide message payloads")
         print("  /sound - Toggle notification sound for new messages")
@@ -1844,6 +1845,49 @@ async def room_session(room):
 
         return False
 
+    async def handle_whoami_command():
+        """Handle the /whoami command.
+
+        This function retrieves and displays detailed information about the currently
+        authenticated user using the Webex API's people/me endpoint.
+
+        Returns:
+            bool: False to indicate the session should continue.
+
+        Raises:
+            WebexAPIError: If there's an error retrieving user information from the API.
+        """
+        try:
+            # Get the user information
+            user_info = client.get_me()
+
+            # Print user information
+            print("\nUser Information:")
+
+            # Iterate through all fields in the payload and display them
+            for key, value in user_info.items():
+                # Format the output based on the type of value
+                if isinstance(value, list):
+                    if value and isinstance(value[0], str):
+                        # Join simple string lists with commas
+                        formatted_value = ", ".join(value)
+                    else:
+                        # For complex lists, print each item on a new line
+                        formatted_value = "\n  - " + "\n  - ".join(str(item) for item in value)
+                elif isinstance(value, dict):
+                    # For dictionaries, format as key-value pairs
+                    formatted_value = "\n  - " + "\n  - ".join(f"{k}: {v}" for k, v in value.items())
+                else:
+                    # For simple values, just convert to string
+                    formatted_value = str(value)
+
+                print(f"  {key}: {formatted_value}")
+
+        except WebexAPIError as e:
+            print(f"\nError retrieving user information: {e}")
+
+        return False
+
     async def handle_slash_message(text):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
@@ -1961,6 +2005,8 @@ async def room_session(room):
                         should_break = await handle_logout_command()
                     elif command == "person":
                         should_break = await handle_person_command(command_parts)
+                    elif command == "whoami":
+                        should_break = await handle_whoami_command()
                     else:
                         should_break = await handle_slash_message(text)
 

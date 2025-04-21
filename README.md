@@ -86,6 +86,7 @@ While in a room, you can use the following commands:
 - `/download <filename>` - Download a file from the current room (can use filename or ID)
 - `/open <filename>` - Download and open a file from the current room with the default application
 - `/person <text>` - Search for people by email (if text contains @) or display name
+- `/whoami` - Display detailed information about your Webex user account
 - `/delete` - Delete the last message you sent in the room
 - `/remove <email_address>` - Remove a user from the current room
 - `/debug` - Toggle debug mode to show/hide message payloads
