@@ -372,16 +372,19 @@ async def room_session(room):
     # Debug mode flag - controls whether to display message payload for debugging
     debug_mode = False
 
+    # Variable to track the last message ID for threading
+    last_message_id = None
+
     # Create custom key bindings
     kb = KeyBindings()
 
-    # Make Enter add a new line, but submit if it's a command
+    # Make Enter add a new line, but submit if it's a command (except for /thread)
     @kb.add("enter")
     def _(event):
         """Handle Enter key press in the prompt.
 
         This function determines the behavior when the Enter key is pressed.
-        If the current text starts with '/', it's treated as a command and submitted.
+        If the current text starts with '/' (except for '/thread'), it's treated as a command and submitted.
         Otherwise, a new line is added to the input buffer.
 
         Args:
@@ -393,8 +396,8 @@ async def room_session(room):
         buffer = event.current_buffer
         text = buffer.text
 
-        # If the input starts with '/', treat it as a command and submit
-        if text.startswith("/"):
+        # If the input starts with '/' (except for '/thread'), treat it as a command and submit
+        if text.startswith("/") and not text.startswith("/thread"):
             buffer.validate_and_handle()
         else:
             buffer.newline()
@@ -484,6 +487,12 @@ async def room_session(room):
         Returns:
             None
         """
+        nonlocal last_message_id
+
+        # Store the message ID for threading
+        if "id" in message:
+            last_message_id = message["id"]
+
         # Skip messages from self
         if message.get("personId") == me["id"]:
             return
@@ -651,10 +660,14 @@ async def room_session(room):
         print(
             "  /nn - Show the last nn messages in the room (where nn is a number between 1 and 10)"
         )
+        print("  /thread <message> - Reply to the most recent message in a thread")
         print(
             "\nTo send a message that starts with a slash, prefix it with another slash:"
         )
         print("  //hello - Sends the message '/hello' to the room")
+        print(
+            "\nNote: For the /thread command, you can press Enter to add multiple lines and use Escape+Enter to send."
+        )
         return False
 
     async def handle_rooms_command(command_parts):
@@ -1888,6 +1901,44 @@ async def room_session(room):
 
         return False
 
+    async def handle_thread_command(command_parts):
+        """Handle the /thread command to send a threaded message.
+
+        This function sends a message as a reply to the previous message,
+        creating a thread in the Webex room.
+
+        Args:
+            command_parts (list): The command parts, where command_parts[0] is "thread"
+                                 and command_parts[1] (if present) is the message text.
+
+        Returns:
+            bool: Always False to continue the room session.
+        """
+        nonlocal last_message_id
+
+        # Check if we have a previous message to reply to
+        if not last_message_id:
+            print("Error: No previous message to reply to.")
+            return False
+
+        # Extract the message text from the command
+        if len(command_parts) > 1:
+            message_text = command_parts[1]
+
+            if message_text.strip():
+                try:
+                    # Pass the text as both plain text and markdown with the parentId
+                    response = client.create_message(
+                        room["id"], message_text, markdown=message_text, parent_id=last_message_id
+                    )
+                    print("Message sent as a thread reply.")
+                except WebexAPIError as e:
+                    print(f"Error sending threaded message: {e}")
+        else:
+            print("Error: No message text provided for the thread.")
+
+        return False
+
     async def handle_slash_message(text):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
@@ -2007,6 +2058,8 @@ async def room_session(room):
                         should_break = await handle_person_command(command_parts)
                     elif command == "whoami":
                         should_break = await handle_whoami_command()
+                    elif command == "thread":
+                        should_break = await handle_thread_command(command_parts)
                     else:
                         should_break = await handle_slash_message(text)
 

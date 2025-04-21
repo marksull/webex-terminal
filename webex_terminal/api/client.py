@@ -296,7 +296,7 @@ class WebexClient:
                 matching_rooms.append(room)
         return matching_rooms
 
-    def create_message(self, room_id: str, text: str, markdown: str = None) -> Dict:
+    def create_message(self, room_id: str, text: str, markdown: str = None, parent_id: str = None) -> Dict:
         """Send a message to a room.
 
         This method sends a message to a specified Webex room. The message can be
@@ -308,6 +308,9 @@ class WebexClient:
             markdown (str, optional): Message text in markdown format. If provided,
                                      the message will be rendered with markdown formatting.
                                      Defaults to None.
+            parent_id (str, optional): ID of the parent message to thread this message under.
+                                      If provided, this message will be part of a thread.
+                                      Defaults to None.
 
         Returns:
             Dict: A dictionary containing information about the created message.
@@ -323,6 +326,10 @@ class WebexClient:
         # Include markdown in the payload if provided
         if markdown:
             data["markdown"] = markdown
+
+        # Include parentId in the payload if provided
+        if parent_id:
+            data["parentId"] = parent_id
 
         return self._request("POST", "messages", json=data)
 
