@@ -97,6 +97,7 @@ class WebexClient:
         if "headers" in kwargs:
             headers.update(kwargs.pop("headers"))
 
+
         # Create a Request object
         req = requests.Request(method, url, headers=headers, **kwargs)
 
@@ -849,6 +850,38 @@ class WebexClient:
         params = {"max": max_results}
         response = self._request("GET", "teams", params=params)
         return response.get("items", [])
+
+    def list_team_rooms(self, team_id: str, max_results: int = 100) -> List[Dict]:
+        """List all rooms (spaces) in a specific team.
+
+        This method retrieves a list of all Webex rooms that are associated with
+        the specified team, up to the specified maximum number of results.
+
+        Args:
+            team_id (str): ID of the team to retrieve rooms for.
+            max_results (int, optional): Maximum number of rooms to return. Defaults to 100.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing information about a room.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        # Use the Webex API to get rooms filtered by teamId
+        params = {
+            "teamId": team_id,
+            "max": max_results
+        }
+
+        # Make the API request
+        response = self._request("GET", "rooms", params=params)
+        rooms = response.get("items", [])
+
+        # Filter rooms to include only those with matching teamId
+        # This ensures we only return rooms that are actually part of the team
+        matching_rooms = [r for r in rooms if r.get('teamId') == team_id]
+
+        return matching_rooms
 
     def download_file(self, room_id: str, filename: str, save_path: str = None) -> str:
         """Download a file from a room.

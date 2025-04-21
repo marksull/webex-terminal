@@ -627,6 +627,7 @@ async def room_session(room):
         print("  /help - Show this help message")
         print("  /rooms [filter] - List all rooms, optionally filtered by text")
         print("  /teams [filter] - List all teams that you are a member of, optionally filtered by text")
+        print("  /spaces <team> - List all spaces in the specified team")
         print("  /members - List all members in the current room")
         print("  /details - Display details about the current room")
         print("  /join <room_id> - Join another room")
@@ -695,6 +696,76 @@ async def room_session(room):
             print("----------------")
             for i, r in enumerate(rooms, 1):
                 print(f"{i}. {r['title']} (ID: {r['id']})")
+        return False
+
+    async def handle_spaces_command(command_parts):
+        """Handle the /spaces command.
+
+        This function lists all spaces (rooms) in a specific Webex team.
+
+        Args:
+            command_parts (list): The command split into parts, where command_parts[1]
+                                 contains the team name or ID.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        # Check if team name/ID is provided
+        if len(command_parts) < 2:
+            print("Error: Team name or ID is required.")
+            print("Usage: /spaces <team name or ID>")
+            return False
+
+        team_identifier = command_parts[1].strip()
+
+        # Get all teams
+        teams = client.list_teams()
+
+        if not teams:
+            print("No teams found.")
+            return False
+
+        # Find the team by name or ID
+        target_team = None
+        for team in teams:
+            # Check for exact ID match
+            if team["id"] == team_identifier:
+                target_team = team
+                break
+            # Check for case-insensitive name match
+            elif team["name"].lower() == team_identifier.lower():
+                target_team = team
+                break
+
+        # If no exact match, try partial name match
+        if not target_team:
+            matching_teams = [t for t in teams if team_identifier.lower() in t["name"].lower()]
+            if len(matching_teams) == 1:
+                target_team = matching_teams[0]
+            elif len(matching_teams) > 1:
+                print(f"\nMultiple teams match '{team_identifier}':")
+                for i, t in enumerate(matching_teams, 1):
+                    print(f"{i}. {t['name']} (ID: {t['id']})")
+                print("\nPlease use a more specific team name or the team ID.")
+                return False
+
+        if not target_team:
+            print(f"No team found matching '{team_identifier}'.")
+            return False
+
+        # Get spaces (rooms) for the team
+        spaces = client.list_team_rooms(target_team["id"])
+
+        if not spaces:
+            print(f"No spaces found in team '{target_team['name']}'.")
+            return False
+
+        # Display spaces
+        print(f"\nSpaces in team '{target_team['name']}':")
+        print("----------------")
+        for i, space in enumerate(spaces, 1):
+            print(f"{i}. {space['title']} (ID: {space['id']})")
+
         return False
 
     async def handle_teams_command(command_parts):
@@ -1565,6 +1636,8 @@ async def room_session(room):
                         should_break = await handle_links_command()
                     elif command == "teams":
                         should_break = await handle_teams_command(command_parts)
+                    elif command == "spaces":
+                        should_break = await handle_spaces_command(command_parts)
                     elif command == "logout":
                         should_break = await handle_logout_command()
                     else:
