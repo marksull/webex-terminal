@@ -629,6 +629,7 @@ async def room_session(room):
         print("  /teams [filter] - List all teams that you are a member of, optionally filtered by text")
         print("  /spaces <team> - List all spaces in the specified team")
         print("  /members - List all members in the current room")
+        print("  /add <email_address> - Add a user to the current room")
         print("  /details - Display details about the current room")
         print("  /join <room_id> - Join another room")
         print("  /files - List all files in the current room with their IDs")
@@ -1034,6 +1035,36 @@ async def room_session(room):
                                 display_image_in_terminal(file_path)
         except WebexAPIError as e:
             print(f"Error retrieving messages: {e}")
+        return False
+
+    async def handle_add_command(command_parts):
+        """Handle the /add command.
+
+        This function adds a user to the current room using their email address.
+
+        Args:
+            command_parts (list): The command split into parts, where command_parts[1]
+                                 contains the email address of the user to add.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        if len(command_parts) <= 1:
+            print("Error: Please specify an email address to add.")
+            print("Usage: /add <email_address>")
+            return False
+
+        email = command_parts[1].strip()
+        if not email:
+            print("Error: Please specify an email address to add.")
+            return False
+
+        try:
+            # Add the user to the room
+            response = client.add_user_to_room(room["id"], email)
+            print(f"User with email '{email}' has been added to the room.")
+        except WebexAPIError as e:
+            print(f"Error adding user to room: {e}")
         return False
 
     async def handle_join_command(command_parts):
@@ -1612,6 +1643,8 @@ async def room_session(room):
                         should_break = await handle_rooms_command(command_parts)
                     elif command == "members":
                         should_break = await handle_members_command()
+                    elif command == "add":
+                        should_break = await handle_add_command(command_parts)
                     elif command == "details":
                         should_break = await handle_details_command()
                     elif command.isdigit() and 1 <= int(command) <= 10:

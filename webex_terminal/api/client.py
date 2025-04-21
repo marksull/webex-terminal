@@ -453,6 +453,28 @@ class WebexClient:
         response = self._request("GET", "memberships", params=params)
         return response.get("items", [])
 
+    def add_user_to_room(self, room_id: str, email: str) -> Dict:
+        """Add a user to a room.
+
+        This method adds a user to a specified Webex room using their email address.
+
+        Args:
+            room_id (str): ID of the room to add the user to.
+            email (str): Email address of the user to add.
+
+        Returns:
+            Dict: A dictionary containing information about the created membership.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        data = {
+            "roomId": room_id,
+            "personEmail": email,
+        }
+        response = self._request("POST", "memberships", json=data)
+        return response
+
     def create_message_with_file(
         self, room_id: str, file_path: str, text: str = None
     ) -> Dict:

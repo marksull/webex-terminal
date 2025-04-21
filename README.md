@@ -78,6 +78,7 @@ While in a room, you can use the following commands:
 - `/teams [filter]` - List all teams that you are a member of, optionally filtered by text
 - `/spaces <team name or ID>` - List all spaces (rooms) in a specific Webex team
 - `/members` - List all members in the current room
+- `/add <email_address>` - Add a user to the current room
 - `/details` - Display details about the current room
 - `/join <room_id>` - Join another room
 - `/files` - List all files in the current room with their IDs
