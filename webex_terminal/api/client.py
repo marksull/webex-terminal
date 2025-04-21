@@ -961,6 +961,25 @@ class WebexClient:
         response = self._request("DELETE", f"memberships/{membership_id}")
         return response
 
+    def list_room_tabs(self, room_id: str) -> List[Dict]:
+        """List all tabs (URLs) associated with a room.
+
+        This method retrieves a list of all tabs (URLs) that are associated with
+        the specified room.
+
+        Args:
+            room_id (str): ID of the room to retrieve tabs for.
+
+        Returns:
+            List[Dict]: A list of dictionaries, each containing information about a tab.
+
+        Raises:
+            WebexAPIError: If there's an error with the API request.
+        """
+        # Make the API request to the room/tabs endpoint
+        response = self._request("GET", f"room/tabs?roomId={room_id}")
+        return response.get("items", [])
+
     def download_file(self, room_id: str, filename: str, save_path: str = None) -> str:
         """Download a file from a room.
 

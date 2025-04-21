@@ -634,6 +634,7 @@ async def room_session(room):
         print("  /join <room_id or name> - Join another room by ID, exact name, or partial name")
         print("  /files - List all files in the current room with their IDs")
         print("  /links - List all links shared in the current room")
+        print("  /urls - List all tabs (URLs) associated with the current room")
         print("  /upload <filename> - Upload a file to the current room")
         print(
             "  /download <filename> - Download a file from the current room (can use filename or ID)"
@@ -1553,6 +1554,88 @@ async def room_session(room):
 
         return False
 
+    async def handle_urls_command():
+        """Handle the /urls command.
+
+        This function retrieves all tabs (URLs) associated with the current room
+        and displays them in a formatted table.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        try:
+            # Get tabs from the room
+            tabs = client.list_room_tabs(room["id"])
+
+            if not tabs:
+                print("\nNo tabs (URLs) found in this room.")
+                return False
+
+            # Display the tabs
+            # Create a table to display tabs
+            try:
+                # Get terminal width
+                terminal_width = shutil.get_terminal_size().columns
+
+                # Calculate column widths based on terminal width
+                # Use proportions: Name (30%), URL (70%)
+                # Ensure minimum width of 80 characters
+                effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+
+                name_width = int(effective_width * 0.30)
+                url_width = effective_width - name_width
+
+                # Create a table
+                table = Texttable(max_width=terminal_width)
+                table.set_deco(Texttable.HEADER)
+                table.set_cols_align(["l", "l"])
+                table.set_cols_width([name_width, url_width])
+
+                # Add header row
+                table.add_row(["Name", "URL"])
+
+                # Add tab rows
+                for tab in tabs:
+                    # Try different field names for the tab name
+                    tab_name = tab.get("displayName", tab.get("title", tab.get("name", "Unnamed")))
+                    table.add_row([tab_name, tab.get("contentUrl", "")])
+
+                # Print the table
+                print(f"\nTabs (URLs) in room '{room['title']}' ({len(tabs)} found):")
+                print(table.draw())
+
+            except ImportError:
+                # If texttable is not available, use simple formatting
+                print(f"\nTabs (URLs) in room '{room['title']}' ({len(tabs)} found):")
+                print("-" * terminal_width)
+
+                # Create header format string with dynamic widths
+                header_format = f"{{:<{name_width}}} {{:<{url_width}}}"
+                print(header_format.format("Name", "URL"))
+
+                # Create a separator line
+                separator_format = f"{{:-<{name_width}}} {{:-<{url_width}}}"
+                print(separator_format.format("", ""))
+
+                # Print each tab
+                for tab in tabs:
+                    # Truncate URL if it's too long for display
+                    url = tab.get("contentUrl", "")
+                    if len(url) > url_width:
+                        url = url[:url_width-3] + "..."
+
+                    # Try different field names for the tab name
+                    tab_name = tab.get("displayName", tab.get("title", tab.get("name", "Unnamed")))
+                    if len(tab_name) > name_width:
+                        tab_name = tab_name[:name_width-3] + "..."
+
+                    print(header_format.format(tab_name, url))
+
+        except WebexAPIError as e:
+            print(f"\nError retrieving tabs: {e}")
+
+        return False
+
     async def handle_links_command():
         """Handle the /links command.
 
@@ -1798,6 +1881,8 @@ async def room_session(room):
                         should_break = await handle_sound_command()
                     elif command == "links":
                         should_break = await handle_links_command()
+                    elif command == "urls":
+                        should_break = await handle_urls_command()
                     elif command == "teams":
                         should_break = await handle_teams_command(command_parts)
                     elif command == "spaces":
