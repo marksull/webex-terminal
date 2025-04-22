@@ -124,6 +124,83 @@ class WebexClient:
         except ValueError:
             return {}
 
+    def _paginated_get(self, url: str, params: Dict = None, item_key: str = "items", 
+                       filter_func=None) -> List[Dict]:
+        """Make a paginated GET request to the Webex API.
+
+        This method handles pagination automatically by following the "Link" header
+        with rel="next" until all pages have been retrieved. It concatenates the
+        results from all pages into a single list.
+
+        Args:
+            url (str): The full URL to request.
+            params (Dict, optional): Query parameters to include in the request.
+            item_key (str, optional): The key in the response JSON that contains the items.
+                                     Defaults to "items".
+            filter_func (callable, optional): A function to filter the items from each page.
+                                             If provided, only items for which this function
+                                             returns True will be included in the result.
+                                             The function should take a single item as input
+                                             and return a boolean.
+
+        Returns:
+            List[Dict]: A list of all items from all pages, optionally filtered.
+
+        Raises:
+            WebexAPIError: If there's an error with the HTTP request or response.
+        """
+        headers = self._get_headers()
+        all_items = []
+
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                items = data.get(item_key, [])
+
+                # Apply filter if provided
+                if filter_func:
+                    items = [item for item in items if filter_func(item)]
+
+                all_items.extend(items)
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_items
+
     def _head_request(self, endpoint: str, **kwargs) -> Dict:
         """Make a HEAD request to the Webex API and extract information from headers.
 
@@ -237,54 +314,9 @@ class WebexClient:
         if title_contains:
             params["title"] = title_contains
 
-        # Make initial request
+        # Use the paginated_get helper method
         url = f"{self.base_url}/rooms"
-        headers = self._get_headers()
-
-        all_rooms = []
-
-        while url:
-            # Make the request
-            response = self.session.get(url, headers=headers, params=params)
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                all_rooms.extend(data.get("items", []))
-
-                # Check for Link header for pagination
-                link_header = response.headers.get("Link", "")
-                url = None
-
-                # Parse Link header to get next page URL
-                if link_header:
-                    links = link_header.split(",")
-                    for link in links:
-                        if 'rel="next"' in link:
-                            # Extract URL from link
-                            url_match = re.search(r"<(.+?)>", link)
-                            if url_match:
-                                url = url_match.group(1)
-                                # Clear params as they're already in the URL
-                                params = {}
-                                break
-
-            except requests.exceptions.HTTPError as e:
-                error_msg = f"HTTP Error: {e}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = f"{error_msg} - {error_data['message']}"
-                except:
-                    pass
-                raise WebexAPIError(error_msg)
-            except requests.exceptions.RequestException as e:
-                raise WebexAPIError(f"Request Error: {e}")
-            except ValueError:
-                # If we can't parse the JSON, just continue with what we have
-                break
-
-        return all_rooms
+        return self._paginated_get(url, params)
 
     def get_room(self, room_id: str) -> Dict:
         """Get details for a specific room.
@@ -408,54 +440,9 @@ class WebexClient:
             "max": max_results,
         }
 
-        # Make initial request
+        # Use the paginated_get helper method
         url = f"{self.base_url}/messages"
-        headers = self._get_headers()
-
-        all_messages = []
-
-        while url:
-            # Make the request
-            response = self.session.get(url, headers=headers, params=params)
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                all_messages.extend(data.get("items", []))
-
-                # Check for Link header for pagination
-                link_header = response.headers.get("Link", "")
-                url = None
-
-                # Parse Link header to get next page URL
-                if link_header:
-                    links = link_header.split(",")
-                    for link in links:
-                        if 'rel="next"' in link:
-                            # Extract URL from link
-                            url_match = re.search(r"<(.+?)>", link)
-                            if url_match:
-                                url = url_match.group(1)
-                                # Clear params as they're already in the URL
-                                params = {}
-                                break
-
-            except requests.exceptions.HTTPError as e:
-                error_msg = f"HTTP Error: {e}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = f"{error_msg} - {error_data['message']}"
-                except:
-                    pass
-                raise WebexAPIError(error_msg)
-            except requests.exceptions.RequestException as e:
-                raise WebexAPIError(f"Request Error: {e}")
-            except ValueError:
-                # If we can't parse the JSON, just continue with what we have
-                break
-
-        return all_messages
+        return self._paginated_get(url, params)
 
     def get_message(self, message_id: str) -> Dict:
         """Get details for a specific message.
@@ -521,54 +508,9 @@ class WebexClient:
         if display_name:
             params["displayName"] = display_name
 
-        # Make initial request
+        # Use the paginated_get helper method
         url = f"{self.base_url}/people"
-        headers = self._get_headers()
-
-        all_people = []
-
-        while url:
-            # Make the request
-            response = self.session.get(url, headers=headers, params=params)
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                all_people.extend(data.get("items", []))
-
-                # Check for Link header for pagination
-                link_header = response.headers.get("Link", "")
-                url = None
-
-                # Parse Link header to get next page URL
-                if link_header:
-                    links = link_header.split(",")
-                    for link in links:
-                        if 'rel="next"' in link:
-                            # Extract URL from link
-                            url_match = re.search(r"<(.+?)>", link)
-                            if url_match:
-                                url = url_match.group(1)
-                                # Clear params as they're already in the URL
-                                params = {}
-                                break
-
-            except requests.exceptions.HTTPError as e:
-                error_msg = f"HTTP Error: {e}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = f"{error_msg} - {error_data['message']}"
-                except:
-                    pass
-                raise WebexAPIError(error_msg)
-            except requests.exceptions.RequestException as e:
-                raise WebexAPIError(f"Request Error: {e}")
-            except ValueError:
-                # If we can't parse the JSON, just continue with what we have
-                break
-
-        return all_people
+        return self._paginated_get(url, params)
 
     def get_person(self, person_id: str) -> Dict:
         """Get details for a specific person.
@@ -628,54 +570,9 @@ class WebexClient:
             "max": max_results,
         }
 
-        # Make initial request
+        # Use the paginated_get helper method
         url = f"{self.base_url}/memberships"
-        headers = self._get_headers()
-
-        all_members = []
-
-        while url:
-            # Make the request
-            response = self.session.get(url, headers=headers, params=params)
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                all_members.extend(data.get("items", []))
-
-                # Check for Link header for pagination
-                link_header = response.headers.get("Link", "")
-                url = None
-
-                # Parse Link header to get next page URL
-                if link_header:
-                    links = link_header.split(",")
-                    for link in links:
-                        if 'rel="next"' in link:
-                            # Extract URL from link
-                            url_match = re.search(r"<(.+?)>", link)
-                            if url_match:
-                                url = url_match.group(1)
-                                # Clear params as they're already in the URL
-                                params = {}
-                                break
-
-            except requests.exceptions.HTTPError as e:
-                error_msg = f"HTTP Error: {e}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = f"{error_msg} - {error_data['message']}"
-                except:
-                    pass
-                raise WebexAPIError(error_msg)
-            except requests.exceptions.RequestException as e:
-                raise WebexAPIError(f"Request Error: {e}")
-            except ValueError:
-                # If we can't parse the JSON, just continue with what we have
-                break
-
-        return all_members
+        return self._paginated_get(url, params)
 
     def add_user_to_room(self, room_id: str, email: str) -> Dict:
         """Add a user to a room.
@@ -1097,54 +994,9 @@ class WebexClient:
         """
         params = {"max": max_results}
 
-        # Make initial request
+        # Use the paginated_get helper method
         url = f"{self.base_url}/teams"
-        headers = self._get_headers()
-
-        all_teams = []
-
-        while url:
-            # Make the request
-            response = self.session.get(url, headers=headers, params=params)
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                all_teams.extend(data.get("items", []))
-
-                # Check for Link header for pagination
-                link_header = response.headers.get("Link", "")
-                url = None
-
-                # Parse Link header to get next page URL
-                if link_header:
-                    links = link_header.split(",")
-                    for link in links:
-                        if 'rel="next"' in link:
-                            # Extract URL from link
-                            url_match = re.search(r"<(.+?)>", link)
-                            if url_match:
-                                url = url_match.group(1)
-                                # Clear params as they're already in the URL
-                                params = {}
-                                break
-
-            except requests.exceptions.HTTPError as e:
-                error_msg = f"HTTP Error: {e}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = f"{error_msg} - {error_data['message']}"
-                except:
-                    pass
-                raise WebexAPIError(error_msg)
-            except requests.exceptions.RequestException as e:
-                raise WebexAPIError(f"Request Error: {e}")
-            except ValueError:
-                # If we can't parse the JSON, just continue with what we have
-                break
-
-        return all_teams
+        return self._paginated_get(url, params)
 
     def list_team_rooms(self, team_id: str, max_results: int = 100) -> List[Dict]:
         """List all rooms (spaces) in a specific team.
@@ -1168,59 +1020,13 @@ class WebexClient:
             "max": max_results
         }
 
-        # Make initial request
+        # Define a filter function to ensure we only return rooms that are actually part of the team
+        def filter_team_rooms(room):
+            return room.get('teamId') == team_id
+
+        # Use the paginated_get helper method with the filter function
         url = f"{self.base_url}/rooms"
-        headers = self._get_headers()
-
-        all_rooms = []
-
-        while url:
-            # Make the request
-            response = self.session.get(url, headers=headers, params=params)
-
-            try:
-                response.raise_for_status()
-                data = response.json()
-                rooms = data.get("items", [])
-
-                # Filter rooms to include only those with matching teamId
-                # This ensures we only return rooms that are actually part of the team
-                matching_rooms = [r for r in rooms if r.get('teamId') == team_id]
-                all_rooms.extend(matching_rooms)
-
-                # Check for Link header for pagination
-                link_header = response.headers.get("Link", "")
-                url = None
-
-                # Parse Link header to get next page URL
-                if link_header:
-                    links = link_header.split(",")
-                    for link in links:
-                        if 'rel="next"' in link:
-                            # Extract URL from link
-                            url_match = re.search(r"<(.+?)>", link)
-                            if url_match:
-                                url = url_match.group(1)
-                                # Clear params as they're already in the URL
-                                params = {}
-                                break
-
-            except requests.exceptions.HTTPError as e:
-                error_msg = f"HTTP Error: {e}"
-                try:
-                    error_data = response.json()
-                    if "message" in error_data:
-                        error_msg = f"{error_msg} - {error_data['message']}"
-                except:
-                    pass
-                raise WebexAPIError(error_msg)
-            except requests.exceptions.RequestException as e:
-                raise WebexAPIError(f"Request Error: {e}")
-            except ValueError:
-                # If we can't parse the JSON, just continue with what we have
-                break
-
-        return all_rooms
+        return self._paginated_get(url, params, filter_func=filter_team_rooms)
 
     def remove_user_from_room(self, room_id: str, email: str) -> Dict:
         """Remove a user from a room.
