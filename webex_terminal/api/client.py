@@ -213,14 +213,17 @@ class WebexClient:
         """
         return self._request("GET", "people/me")
 
-    def list_rooms(self, max_results: int = 100) -> List[Dict]:
+    def list_rooms(self, max_results: int = 100, title_contains: str = None) -> List[Dict]:
         """List all rooms the user is a member of.
 
         This method retrieves a list of all Webex rooms that the authenticated
-        user is a member of, up to the specified maximum number of results.
+        user is a member of. It handles pagination automatically to retrieve all rooms,
+        and can optionally filter rooms by title.
 
         Args:
-            max_results (int, optional): Maximum number of rooms to return. Defaults to 100.
+            max_results (int, optional): Maximum number of rooms to return per page. Defaults to 100.
+            title_contains (str, optional): If provided, only rooms with titles containing this string
+                                           will be returned. The filtering is done on the server side.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a room.
@@ -229,8 +232,59 @@ class WebexClient:
             WebexAPIError: If there's an error with the API request.
         """
         params = {"max": max_results}
-        response = self._request("GET", "rooms", params=params)
-        return response.get("items", [])
+
+        # Add title filter if provided
+        if title_contains:
+            params["title"] = title_contains
+
+        # Make initial request
+        url = f"{self.base_url}/rooms"
+        headers = self._get_headers()
+
+        all_rooms = []
+
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                all_rooms.extend(data.get("items", []))
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_rooms
 
     def get_room(self, room_id: str) -> Dict:
         """Get details for a specific room.
@@ -267,7 +321,10 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        rooms = self.list_rooms()
+        # Use the title_contains parameter for server-side filtering to narrow down the results
+        rooms = self.list_rooms(title_contains=name)
+
+        # Then find the exact match (case-insensitive)
         for room in rooms:
             if room["title"].lower() == name.lower():
                 return room
@@ -277,7 +334,7 @@ class WebexClient:
         """Search for rooms by partial name.
 
         This method searches for Webex rooms whose names contain the specified string.
-        The search is case-insensitive.
+        The search is case-insensitive and performed on the server side.
 
         Args:
             name (str): Partial name to search for.
@@ -289,12 +346,8 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        rooms = self.list_rooms()
-        matching_rooms = []
-        for room in rooms:
-            if name.lower() in room["title"].lower():
-                matching_rooms.append(room)
-        return matching_rooms
+        # Use the title_contains parameter for server-side filtering
+        return self.list_rooms(title_contains=name)
 
     def create_message(self, room_id: str, text: str, markdown: str = None, parent_id: str = None) -> Dict:
         """Send a message to a room.
@@ -336,13 +389,13 @@ class WebexClient:
     def list_messages(self, room_id: str, max_results: int = 50) -> List[Dict]:
         """List messages in a room.
 
-        This method retrieves a list of messages from a specified Webex room,
-        up to the specified maximum number of results. Messages are returned
-        in reverse chronological order (newest first).
+        This method retrieves a list of messages from a specified Webex room.
+        It handles pagination automatically to retrieve all messages.
+        Messages are returned in reverse chronological order (newest first).
 
         Args:
             room_id (str): ID of the room to retrieve messages from.
-            max_results (int, optional): Maximum number of messages to return. Defaults to 50.
+            max_results (int, optional): Maximum number of messages to return per page. Defaults to 50.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a message.
@@ -354,8 +407,55 @@ class WebexClient:
             "roomId": room_id,
             "max": max_results,
         }
-        response = self._request("GET", "messages", params=params)
-        return response.get("items", [])
+
+        # Make initial request
+        url = f"{self.base_url}/messages"
+        headers = self._get_headers()
+
+        all_messages = []
+
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                all_messages.extend(data.get("items", []))
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_messages
 
     def get_message(self, message_id: str) -> Dict:
         """Get details for a specific message.
@@ -402,11 +502,12 @@ class WebexClient:
 
         This method retrieves a list of people from the Webex organization,
         with optional filtering by email address or display name.
+        It handles pagination automatically to retrieve all matching people.
 
         Args:
             email (Optional[str], optional): Email address filter. Defaults to None.
             display_name (Optional[str], optional): Display name filter. Defaults to None.
-            max_results (int, optional): Maximum number of people to return. Defaults to 50.
+            max_results (int, optional): Maximum number of people to return per page. Defaults to 50.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a person.
@@ -420,8 +521,54 @@ class WebexClient:
         if display_name:
             params["displayName"] = display_name
 
-        response = self._request("GET", "people", params=params)
-        return response.get("items", [])
+        # Make initial request
+        url = f"{self.base_url}/people"
+        headers = self._get_headers()
+
+        all_people = []
+
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                all_people.extend(data.get("items", []))
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_people
 
     def get_person(self, person_id: str) -> Dict:
         """Get details for a specific person.
@@ -463,12 +610,12 @@ class WebexClient:
     def list_room_members(self, room_id: str, max_results: int = 100) -> List[Dict]:
         """List members of a room.
 
-        This method retrieves a list of all members in a specified Webex room,
-        up to the specified maximum number of results.
+        This method retrieves a list of all members in a specified Webex room.
+        It handles pagination automatically to retrieve all members.
 
         Args:
             room_id (str): ID of the room to retrieve members from.
-            max_results (int, optional): Maximum number of members to return. Defaults to 100.
+            max_results (int, optional): Maximum number of members to return per page. Defaults to 100.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a member.
@@ -480,8 +627,55 @@ class WebexClient:
             "roomId": room_id,
             "max": max_results,
         }
-        response = self._request("GET", "memberships", params=params)
-        return response.get("items", [])
+
+        # Make initial request
+        url = f"{self.base_url}/memberships"
+        headers = self._get_headers()
+
+        all_members = []
+
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                all_members.extend(data.get("items", []))
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_members
 
     def add_user_to_room(self, room_id: str, email: str) -> Dict:
         """Add a user to a room.
@@ -574,11 +768,13 @@ class WebexClient:
     def list_files(self, room_id: str, max_results: int = 100) -> List[Dict]:
         """List files available in a room.
 
-        This method retrieves a list of files that have been shared in a room.
+        This method retrieves a list of all files that have been shared in a room.
+        It handles pagination automatically to retrieve all messages with file attachments.
 
         Args:
             room_id (str): ID of the room to search for files.
-            max_results (int, optional): Maximum number of messages to check for files. Defaults to 100.
+            max_results (int, optional): Maximum number of messages to retrieve per page. Defaults to 100.
+                                        This parameter is passed to the list_messages method.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a file.
@@ -589,7 +785,7 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        # Get messages in the room
+        # Get all messages in the room (list_messages now handles pagination)
         messages = self.list_messages(room_id, max_results=max_results)
 
         # List to store file information
@@ -888,10 +1084,10 @@ class WebexClient:
         """List all teams the user is a member of.
 
         This method retrieves a list of all Webex teams that the authenticated
-        user is a member of, up to the specified maximum number of results.
+        user is a member of. It handles pagination automatically to retrieve all teams.
 
         Args:
-            max_results (int, optional): Maximum number of teams to return. Defaults to 100.
+            max_results (int, optional): Maximum number of teams to return per page. Defaults to 100.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a team.
@@ -900,18 +1096,65 @@ class WebexClient:
             WebexAPIError: If there's an error with the API request.
         """
         params = {"max": max_results}
-        response = self._request("GET", "teams", params=params)
-        return response.get("items", [])
+
+        # Make initial request
+        url = f"{self.base_url}/teams"
+        headers = self._get_headers()
+
+        all_teams = []
+
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                all_teams.extend(data.get("items", []))
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_teams
 
     def list_team_rooms(self, team_id: str, max_results: int = 100) -> List[Dict]:
         """List all rooms (spaces) in a specific team.
 
         This method retrieves a list of all Webex rooms that are associated with
-        the specified team, up to the specified maximum number of results.
+        the specified team. It handles pagination automatically to retrieve all rooms.
 
         Args:
             team_id (str): ID of the team to retrieve rooms for.
-            max_results (int, optional): Maximum number of rooms to return. Defaults to 100.
+            max_results (int, optional): Maximum number of rooms to return per page. Defaults to 100.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a room.
@@ -925,15 +1168,59 @@ class WebexClient:
             "max": max_results
         }
 
-        # Make the API request
-        response = self._request("GET", "rooms", params=params)
-        rooms = response.get("items", [])
+        # Make initial request
+        url = f"{self.base_url}/rooms"
+        headers = self._get_headers()
 
-        # Filter rooms to include only those with matching teamId
-        # This ensures we only return rooms that are actually part of the team
-        matching_rooms = [r for r in rooms if r.get('teamId') == team_id]
+        all_rooms = []
 
-        return matching_rooms
+        while url:
+            # Make the request
+            response = self.session.get(url, headers=headers, params=params)
+
+            try:
+                response.raise_for_status()
+                data = response.json()
+                rooms = data.get("items", [])
+
+                # Filter rooms to include only those with matching teamId
+                # This ensures we only return rooms that are actually part of the team
+                matching_rooms = [r for r in rooms if r.get('teamId') == team_id]
+                all_rooms.extend(matching_rooms)
+
+                # Check for Link header for pagination
+                link_header = response.headers.get("Link", "")
+                url = None
+
+                # Parse Link header to get next page URL
+                if link_header:
+                    links = link_header.split(",")
+                    for link in links:
+                        if 'rel="next"' in link:
+                            # Extract URL from link
+                            url_match = re.search(r"<(.+?)>", link)
+                            if url_match:
+                                url = url_match.group(1)
+                                # Clear params as they're already in the URL
+                                params = {}
+                                break
+
+            except requests.exceptions.HTTPError as e:
+                error_msg = f"HTTP Error: {e}"
+                try:
+                    error_data = response.json()
+                    if "message" in error_data:
+                        error_msg = f"{error_msg} - {error_data['message']}"
+                except:
+                    pass
+                raise WebexAPIError(error_msg)
+            except requests.exceptions.RequestException as e:
+                raise WebexAPIError(f"Request Error: {e}")
+            except ValueError:
+                # If we can't parse the JSON, just continue with what we have
+                break
+
+        return all_rooms
 
     def remove_user_from_room(self, room_id: str, email: str) -> Dict:
         """Remove a user from a room.

@@ -86,7 +86,7 @@ def display_image_in_terminal(image_path):
         return False
 
 
-def display_rooms(client, use_print=False):
+def display_rooms(client, use_print=False, rooms=None):
     """Display a list of available Webex rooms.
 
     This function retrieves and displays a list of Webex rooms that the user
@@ -95,11 +95,15 @@ def display_rooms(client, use_print=False):
     Args:
         client (WebexClient): An authenticated Webex API client
         use_print (bool): If True, use print() instead of click.echo()
+        rooms (list, optional): A pre-fetched list of rooms. If not provided,
+                               the function will call client.list_rooms() to get the rooms.
 
     Returns:
         list: The list of rooms, or None if no rooms were found
     """
-    rooms = client.list_rooms()
+    # If rooms are not provided, fetch them
+    if rooms is None:
+        rooms = client.list_rooms()
 
     if not rooms:
         if use_print:
@@ -230,31 +234,26 @@ def list_rooms(filter_text):
         # Get rooms
         client = WebexClient()
 
-        # Get all rooms
-        rooms = client.list_rooms()
+        # Get rooms, applying filter on the server side if provided
+        rooms = client.list_rooms(title_contains=filter_text)
 
         if not rooms:
-            click.echo("No rooms found.")
+            if filter_text:
+                click.echo(f"No rooms found matching '{filter_text}'.")
+            else:
+                click.echo("No rooms found.")
             return
 
-        # Filter rooms if filter_text is provided
+        # Display rooms
         if filter_text:
-            filtered_rooms = [
-                room for room in rooms if filter_text.lower() in room["title"].lower()
-            ]
-
-            if not filtered_rooms:
-                click.echo(f"No rooms found matching '{filter_text}'.")
-                return
-
             # Display filtered rooms
             click.echo(f"\nRooms matching '{filter_text}':")
             click.echo("----------------")
-            for i, room in enumerate(filtered_rooms, 1):
+            for i, room in enumerate(rooms, 1):
                 click.echo(f"{i}. {room['title']} (ID: {room['id']})")
         else:
             # No filter, display all rooms using the display_rooms function
-            display_rooms(client)
+            display_rooms(client, rooms=rooms)
 
         click.echo()
 
@@ -685,27 +684,24 @@ async def room_session(room):
         # Check if there's additional text to filter rooms
         filter_text = ""
         if len(command_parts) > 1:
-            filter_text = command_parts[1].strip().lower()
+            filter_text = command_parts[1].strip()
 
-        # Get all rooms
-        rooms = client.list_rooms()
+        # Get rooms, applying filter on the server side if provided
+        rooms = client.list_rooms(title_contains=filter_text if filter_text else None)
 
         if not rooms:
-            print("No rooms found.")
+            if filter_text:
+                print(f"\nNo rooms found matching '{filter_text}'.")
+            else:
+                print("No rooms found.")
             return False
 
-        # Filter rooms if filter_text is provided
+        # Display rooms
         if filter_text:
-            filtered_rooms = [r for r in rooms if filter_text in r["title"].lower()]
-
-            if not filtered_rooms:
-                print(f"\nNo rooms found matching '{filter_text}'.")
-                return False
-
             # Display filtered rooms
             print(f"\nRooms matching '{filter_text}':")
             print("----------------")
-            for i, r in enumerate(filtered_rooms, 1):
+            for i, r in enumerate(rooms, 1):
                 print(f"{i}. {r['title']} (ID: {r['id']})")
         else:
             # No filter, display all rooms
