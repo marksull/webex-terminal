@@ -300,7 +300,8 @@ class WebexClient:
         Args:
             max_results (int, optional): Maximum number of rooms to return per page. Defaults to 100.
             title_contains (str, optional): If provided, only rooms with titles containing this string
-                                           will be returned. The filtering is done on the server side.
+                                           will be returned. The filtering is done on the client side
+                                           since the Webex API doesn't support server-side filtering by title.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a room.
@@ -310,13 +311,17 @@ class WebexClient:
         """
         params = {"max": max_results}
 
-        # Add title filter if provided
-        if title_contains:
-            params["title"] = title_contains
-
         # Use the paginated_get helper method
         url = f"{self.base_url}/rooms"
-        return self._paginated_get(url, params)
+
+        # Get all rooms first
+        rooms = self._paginated_get(url, params)
+
+        # Filter by title if needed (client-side filtering)
+        if title_contains:
+            return [room for room in rooms if title_contains.lower() in room['title'].lower()]
+
+        return rooms
 
     def get_room(self, room_id: str) -> Dict:
         """Get details for a specific room.
@@ -353,7 +358,7 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        # Use the title_contains parameter for server-side filtering to narrow down the results
+        # Use the title_contains parameter for client-side filtering to narrow down the results
         rooms = self.list_rooms(title_contains=name)
 
         # Then find the exact match (case-insensitive)
@@ -378,7 +383,7 @@ class WebexClient:
         Raises:
             WebexAPIError: If there's an error with the API request.
         """
-        # Use the title_contains parameter for server-side filtering
+        # Use the title_contains parameter for client-side filtering
         return self.list_rooms(title_contains=name)
 
     def create_message(self, room_id: str, text: str, markdown: str = None, parent_id: str = None) -> Dict:
