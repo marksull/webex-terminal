@@ -270,53 +270,56 @@ async def room_session(room):
 
     session = PromptSession(multiline=True, key_bindings=kb)
 
-    print(f"\nJoined room: {room['title']}")
+    # Only show the joined room message if it's not a dummy room
+    if room["id"] != "dummy":
+        print(f"\nJoined room: {room['title']}")
     print(
         f"Type a message and press Enter to add a new line. Press {send_key_desc} to send. Type /help for available commands."
     )
 
-    # Automatically display room details (same as /details command)
-    try:
-        # Get the latest room details
-        room_details = client.get_room(room["id"])
+    # Automatically display room details (same as /details command) only if not a dummy room
+    if room["id"] != "dummy":
+        try:
+            # Get the latest room details
+            room_details = client.get_room(room["id"])
 
-        # Get room members count
-        members = client.list_room_members(room["id"])
-        member_count = len(members)
+            # Get room members count
+            members = client.list_room_members(room["id"])
+            member_count = len(members)
 
-        # Print room details
-        print("\nRoom Details:")
-        print(f"  Title: {room_details.get('title', 'Unknown')}")
-        print(f"  ID: {room_details.get('id', 'Unknown')}")
-        print(f"  Type: {room_details.get('type', 'Unknown').capitalize()}")
+            # Print room details
+            print("\nRoom Details:")
+            print(f"  Title: {room_details.get('title', 'Unknown')}")
+            print(f"  ID: {room_details.get('id', 'Unknown')}")
+            print(f"  Type: {room_details.get('type', 'Unknown').capitalize()}")
 
-        # Format and display creation date if available
-        created = room_details.get("created", "Unknown")
-        if created != "Unknown":
-            # Just take the date part (first 10 characters)
-            created = created[:10]
-        print(f"  Created: {created}")
+            # Format and display creation date if available
+            created = room_details.get("created", "Unknown")
+            if created != "Unknown":
+                # Just take the date part (first 10 characters)
+                created = created[:10]
+            print(f"  Created: {created}")
 
-        # Display last activity if available
-        last_activity = room_details.get("lastActivity", "Unknown")
-        if last_activity != "Unknown":
-            # Just take the date part (first 10 characters)
-            last_activity = last_activity[:10]
-        print(f"  Last Activity: {last_activity}")
+            # Display last activity if available
+            last_activity = room_details.get("lastActivity", "Unknown")
+            if last_activity != "Unknown":
+                # Just take the date part (first 10 characters)
+                last_activity = last_activity[:10]
+            print(f"  Last Activity: {last_activity}")
 
-        # Display team info if available
-        if "teamId" in room_details:
-            print(f"  Team ID: {room_details.get('teamId', 'Unknown')}")
+            # Display team info if available
+            if "teamId" in room_details:
+                print(f"  Team ID: {room_details.get('teamId', 'Unknown')}")
 
-        # Display member count
-        print(f"  Member Count: {member_count}")
+            # Display member count
+            print(f"  Member Count: {member_count}")
 
-        # Display if the room is locked
-        is_locked = "Yes" if room_details.get("isLocked", False) else "No"
-        print(f"  Locked: {is_locked}")
+            # Display if the room is locked
+            is_locked = "Yes" if room_details.get("isLocked", False) else "No"
+            print(f"  Locked: {is_locked}")
 
-    except WebexAPIError as e:
-        print(f"\nError retrieving room details: {e}")
+        except WebexAPIError as e:
+            print(f"\nError retrieving room details: {e}")
 
     # Create an event to signal when to exit the room
     exit_event = asyncio.Event()
@@ -1949,9 +1952,11 @@ async def room_session(room):
                     await asyncio.sleep(0)
 
                     with patch_stdout():
+                        # Use "no room joined" instead of room title for dummy room
+                        room_display = "no room joined" if room["id"] == "dummy" else room['title']
                         text = await session.prompt_async(
                             HTML(
-                                f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "
+                                f"<username>{me['displayName']}</username>@<room>{room_display}</room>> "
                             ),
                             style=style,
                         )
