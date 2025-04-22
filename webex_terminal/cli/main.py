@@ -203,11 +203,17 @@ async def room_session(room):
         Exception: If there's an error during the room session
     """
     client = WebexClient()
-    websocket = await create_websocket_client()
+    websocket = None
 
-    # Set the current room - prefer globalId if available, otherwise use id
-    room_id = room.get("globalId", room["id"])
-    websocket.set_room(room_id)
+    # Flag to track if we've joined a real room
+    joined_real_room = room["id"] != "dummy"
+
+    # Only create websocket client if we're joining a real room
+    if joined_real_room:
+        websocket = await create_websocket_client()
+        # Set the current room - prefer globalId if available, otherwise use id
+        room_id = room.get("globalId", room["id"])
+        websocket.set_room(room_id)
 
     # Get user info
     me = client.get_me()
@@ -468,8 +474,9 @@ async def room_session(room):
             print(f"\nError processing message: {e}")
             pass
 
-    # Set message callback
-    websocket.on_message(message_callback)
+    # Set message callback if websocket client exists
+    if websocket:
+        websocket.on_message(message_callback)
 
     # Helper methods for handling commands
     async def handle_exit_command():
@@ -950,9 +957,14 @@ async def room_session(room):
         If multiple rooms match the partial name, a list of matching rooms is displayed
         for the user to choose from.
         """
-        nonlocal room
+        nonlocal room, websocket, joined_real_room
         if len(command_parts) <= 1:
             print("Error: Please specify a room ID or name to join.")
+            return False
+
+        # Check if authenticated
+        if not is_authenticated():
+            print("Error: You must authenticate first. Use the /auth command.")
             return False
 
         # Use the original case for the room ID or name
@@ -962,12 +974,17 @@ async def room_session(room):
         try:
             temp_room = client.get_room(room_identifier)
 
-            # Set the new room ID on the existing websocket client
+            # Create websocket client if it doesn't exist yet
+            if websocket is None:
+                websocket = await create_websocket_client()
+
+            # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
             websocket.set_room(room_id)
 
             # Update the room variable to the new room
             room = temp_room
+            joined_real_room = True
 
             # Print a message indicating the room change
             print(f"Joined room: {temp_room['title']}")
@@ -981,12 +998,17 @@ async def room_session(room):
         # Try to find room by exact name
         temp_room = client.get_room_by_name(room_identifier)
         if temp_room:
-            # Set the new room ID on the existing websocket client
+            # Create websocket client if it doesn't exist yet
+            if websocket is None:
+                websocket = await create_websocket_client()
+
+            # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
             websocket.set_room(room_id)
 
             # Update the room variable to the new room
             room = temp_room
+            joined_real_room = True
 
             # Print a message indicating the room change
             print(f"Joined room: {temp_room['title']}")
@@ -1004,12 +1026,17 @@ async def room_session(room):
             # Only one match, join it directly
             temp_room = matching_rooms[0]
 
-            # Set the new room ID on the existing websocket client
+            # Create websocket client if it doesn't exist yet
+            if websocket is None:
+                websocket = await create_websocket_client()
+
+            # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
             websocket.set_room(room_id)
 
             # Update the room variable to the new room
             room = temp_room
+            joined_real_room = True
 
             # Print a message indicating the room change
             print(f"Joined room: {temp_room['title']}")
@@ -1034,12 +1061,17 @@ async def room_session(room):
 
             temp_room = matching_rooms[selection_index]
 
-            # Set the new room ID on the existing websocket client
+            # Create websocket client if it doesn't exist yet
+            if websocket is None:
+                websocket = await create_websocket_client()
+
+            # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
             websocket.set_room(room_id)
 
             # Update the room variable to the new room
             room = temp_room
+            joined_real_room = True
 
             # Print a message indicating the room change
             print(f"Joined room: {temp_room['title']}")
@@ -1814,6 +1846,16 @@ async def room_session(room):
         """
         nonlocal last_message_id
 
+        # Check if authenticated
+        if not is_authenticated():
+            print("Error: You must authenticate first. Use the /auth command.")
+            return False
+
+        # Check if joined a real room
+        if not joined_real_room:
+            print("Error: You must join a room first. Use the /join command.")
+            return False
+
         # Check if we have a previous message to reply to
         if not last_message_id:
             print("Error: No previous message to reply to.")
@@ -1841,6 +1883,16 @@ async def room_session(room):
         """Handle messages that start with a slash."""
         # Check if it's a message that starts with a slash (e.g., "//" or "/text")
         if text.startswith("//"):
+            # Check if authenticated
+            if not is_authenticated():
+                print("Error: You must authenticate first. Use the /auth command.")
+                return False
+
+            # Check if joined a real room
+            if not joined_real_room:
+                print("Error: You must join a room first. Use the /join command.")
+                return False
+
             # Remove the first slash and send the rest as a message
             message_text = text[1:]
             try:
@@ -1858,6 +1910,16 @@ async def room_session(room):
     async def handle_regular_message(text):
         """Handle regular messages (not commands)."""
         if text.strip():
+            # Check if authenticated
+            if not is_authenticated():
+                print("Error: You must authenticate first. Use the /auth command.")
+                return False
+
+            # Check if joined a real room
+            if not joined_real_room:
+                print("Error: You must join a room first. Use the /join command.")
+                return False
+
             try:
                 # Pass the text as both plain text and markdown
                 # The API will use markdown if it contains valid markdown
@@ -1993,8 +2055,9 @@ async def room_session(room):
             except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
 
-        # Disconnect the websocket
-        await websocket.disconnect()
+        # Disconnect the websocket if it exists
+        if websocket:
+            await websocket.disconnect()
 
         # If we're switching rooms, start a new room session
         if new_room:
@@ -2020,6 +2083,10 @@ def main():
     auth, list-rooms, or join-room arguments. If the user is not authenticated,
     they can use the /auth command within the application.
 
+    The application will not start the websocket service until a /join request
+    has been made. A message cannot be sent until both /auth and /join have been
+    completed.
+
     Returns:
         None
 
@@ -2027,25 +2094,25 @@ def main():
         SystemExit: If an unhandled exception occurs during execution
     """
     try:
+        # Create a dummy room to start with - no websocket will be created yet
+        dummy_room = {
+            "id": "dummy",
+            "title": "Webex Terminal",
+        }
+
         # Check if authenticated
         if is_authenticated():
-            # Create a dummy room to start with
-            dummy_room = {
-                "id": "dummy",
-                "title": "Webex Terminal",
-            }
-            asyncio.run(room_session(dummy_room))
+            click.echo("Welcome to Webex Terminal!")
+            click.echo("You are authenticated. Use the /join command to join a room.")
+            click.echo("Type /help for a list of available commands.")
         else:
             click.echo("Welcome to Webex Terminal!")
             click.echo("You are not authenticated. Use the /auth command to authenticate.")
+            click.echo("After authentication, use the /join command to join a room.")
             click.echo("Type /help for a list of available commands.")
 
-            # Create a dummy room to start with
-            dummy_room = {
-                "id": "dummy",
-                "title": "Webex Terminal",
-            }
-            asyncio.run(room_session(dummy_room))
+        # Start the application with the dummy room
+        asyncio.run(room_session(dummy_room))
     except Exception as e:
         click.echo(f"Error: {e}")
         sys.exit(1)
