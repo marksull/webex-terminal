@@ -205,6 +205,9 @@ async def room_session(room):
     client = WebexClient()
     websocket = None
 
+    # Store the list of rooms from the most recent /rooms command
+    last_rooms_list = []
+
     # Flag to track if we've joined a real room
     joined_real_room = room["id"] != "dummy"
 
@@ -513,7 +516,7 @@ async def room_session(room):
         print("  /members - List all members in the current room")
         print("  /add <email_address> - Add a user to the current room")
         print("  /details - Display details about the current room")
-        print("  /join <room_id or name> - Join another room by ID, exact name, or partial name")
+        print("  /join <room_id or name or number> - Join another room by ID, exact name, partial name, or number from the most recent /rooms list")
         print("  /files - List all files in the current room with their IDs")
         print("  /links - List all links shared in the current room")
         print("  /urls - List all tabs (URLs) associated with the current room")
@@ -555,6 +558,8 @@ async def room_session(room):
         Returns:
             bool: False to indicate the session should continue.
         """
+        nonlocal last_rooms_list
+
         # Check if there's additional text to filter rooms
         filter_text = ""
         if len(command_parts) > 1:
@@ -568,7 +573,12 @@ async def room_session(room):
                 print(f"\nNo rooms found matching '{filter_text}'.")
             else:
                 print("No rooms found.")
+            # Clear the last_rooms_list since no rooms were found
+            last_rooms_list = []
             return False
+
+        # Store the rooms for later use with /join command
+        last_rooms_list = rooms
 
         # Display rooms
         if filter_text:
@@ -956,13 +966,14 @@ async def room_session(room):
     async def handle_join_command(command_parts):
         """Handle the /join command.
 
-        The command accepts a room ID, exact room name, or partial room name.
+        The command accepts a room ID, exact room name, partial room name, or a number
+        corresponding to a room from the most recent /rooms command.
         If multiple rooms match the partial name, a list of matching rooms is displayed
         for the user to choose from.
         """
-        nonlocal room, websocket, joined_real_room
+        nonlocal room, websocket, joined_real_room, last_rooms_list
         if len(command_parts) <= 1:
-            print("Error: Please specify a room ID or name to join.")
+            print("Error: Please specify a room ID, name, or number to join.")
             return False
 
         # Check if authenticated
@@ -972,6 +983,34 @@ async def room_session(room):
 
         # Use the original case for the room ID or name
         room_identifier = command_parts[1].strip()
+
+        # Check if the room_identifier is a number and we have a list of rooms
+        if room_identifier.isdigit() and last_rooms_list:
+            room_number = int(room_identifier)
+            if 1 <= room_number <= len(last_rooms_list):
+                # Get the room from the list using the number
+                temp_room = last_rooms_list[room_number - 1]
+
+                # Create websocket client if it doesn't exist yet
+                if websocket is None:
+                    websocket = await create_websocket_client()
+
+                # Set the new room ID on the websocket client
+                room_id = temp_room.get("globalId", temp_room["id"])
+                websocket.set_room(room_id)
+
+                # Update the room variable to the new room
+                room = temp_room
+                joined_real_room = True
+
+                # Print a message indicating the room change
+                print(f"Joined room: {temp_room['title']}")
+
+                # No need to exit the current room session
+                return False
+            else:
+                print(f"Error: Room number {room_number} is not valid. Use /rooms to see available rooms.")
+                return False
 
         # First try to get the room by ID
         try:

@@ -78,6 +78,14 @@ or
 /join Room Name
 ```
 
+or, after using the `/rooms` command, you can join a room by its number:
+
+```
+/join <number>
+```
+
+For example, if the `/rooms` command shows "2. Mark's space", you can join it with `/join 2`.
+
 ### Sending Messages
 
 Once in a room, you can type messages directly in the terminal. Press Enter to send.
