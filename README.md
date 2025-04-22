@@ -48,6 +48,14 @@ To list available rooms:
 webex-terminal list-rooms
 ```
 
+To filter rooms by title:
+
+```bash
+webex-terminal list-rooms "filter text"
+```
+
+This will only display rooms with titles containing the specified filter text.
+
 ### Joining a Room
 
 To join a specific room:
