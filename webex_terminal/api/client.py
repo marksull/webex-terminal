@@ -427,12 +427,12 @@ class WebexClient:
         """List messages in a room.
 
         This method retrieves a list of messages from a specified Webex room.
-        It handles pagination automatically to retrieve all messages.
+        It handles pagination automatically to retrieve messages.
         Messages are returned in reverse chronological order (newest first).
 
         Args:
             room_id (str): ID of the room to retrieve messages from.
-            max_results (int, optional): Maximum number of messages to return per page. Defaults to 50.
+            max_results (int, optional): Maximum number of messages to return. Defaults to 50.
 
         Returns:
             List[Dict]: A list of dictionaries, each containing information about a message.
@@ -442,12 +442,15 @@ class WebexClient:
         """
         params = {
             "roomId": room_id,
-            "max": max_results,
+            "max": 50,  # Use a fixed page size for API requests
         }
 
         # Use the paginated_get helper method
         url = f"{self.base_url}/messages"
-        return self._paginated_get(url, params)
+        messages = self._paginated_get(url, params)
+
+        # Limit the number of messages to max_results
+        return messages[:max_results]
 
     def get_message(self, message_id: str) -> Dict:
         """Get details for a specific message.
