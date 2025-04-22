@@ -14,6 +14,7 @@ import platform
 import tempfile
 import imghdr
 import re
+from html.parser import HTMLParser
 from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.styles import Style
@@ -30,6 +31,42 @@ from webex_terminal.auth.auth import (
 from webex_terminal.api.client import WebexClient, WebexAPIError
 from webex_terminal.api.new_websocket import create_websocket_client
 from webex_terminal.config import load_config, save_config
+
+
+class HTMLToTextParser(HTMLParser):
+    """A simple HTML parser that converts HTML to plain text.
+
+    This parser extracts text from HTML content and preserves formatting
+    as much as possible. It handles common HTML tags like <p>, <code>,
+    <br>, etc. and converts them to appropriate plain text representations.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.result = []
+        self.in_code = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'p':
+            # Add newline before paragraphs if not at the beginning
+            if self.result:
+                self.result.append('\n')
+        elif tag == 'br':
+            self.result.append('\n')
+        elif tag == 'code':
+            self.in_code = True
+            self.result.append('`')
+
+    def handle_endtag(self, tag):
+        if tag == 'code':
+            self.in_code = False
+            self.result.append('`')
+
+    def handle_data(self, data):
+        self.result.append(data)
+
+    def get_text(self):
+        return ''.join(self.result)
 
 
 def display_image_in_terminal(image_path):
@@ -505,15 +542,31 @@ async def room_session(room):
             sender_name = "Unknown"
 
         # Print the message
-        # Use markdown content if available, otherwise fall back to text
-        message_text = message.get("markdown", message.get("text", ""))
+        # Check for content in html, markdown, and text attributes in that order
+        message_text = message.get("html", message.get("markdown", message.get("text", "")))
+        content_type = "text"
+        if message.get("html"):
+            content_type = "html"
+        elif message.get("markdown"):
+            content_type = "markdown"
+
         # noinspection PyBroadException
         try:
             # Yield control back to the event loop before displaying the message
             await asyncio.sleep(0)
 
-            # Convert markdown to HTML if markdown content is available
-            if message.get("markdown"):
+            # Process the message based on content type
+            if content_type == "html":
+                # For HTML content, we need to convert it to plain text
+                # Use our custom HTML parser to extract text from HTML content
+                parser = HTMLToTextParser()
+                parser.feed(message_text)
+                plain_text = parser.get_text()
+
+                # Escape any HTML in the plain text to prevent injection when using HTML class
+                html_content = html.escape(plain_text)
+                render_as_html = False
+            elif content_type == "markdown":
                 # Escape any HTML in the original message to prevent injection
                 safe_text = html.escape(message_text)
                 # Convert markdown to HTML
@@ -522,9 +575,11 @@ async def room_session(room):
                 html_content = html_content.strip()
                 if html_content.startswith("<p>") and html_content.endswith("</p>"):
                     html_content = html_content[3:-4]
+                render_as_html = False
             else:
-                # If no markdown, just escape the text
+                # If no html or markdown, just escape the text
                 html_content = html.escape(message_text)
+                render_as_html = False
 
             # Check for file attachments
             file_info = ""
@@ -582,6 +637,7 @@ async def room_session(room):
                     print("\a", end="", flush=True)  # \a is the ASCII bell character
 
                 # Format message with sender name as prefix, keeping the styling
+                # For all content types, wrap in message tags
                 print_formatted_text(
                     HTML(
                         f"\n<username>{sender_name}</username>: <message>{html_content}</message>"
