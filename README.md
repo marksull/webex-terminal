@@ -30,44 +30,52 @@ pip install -e .
 
 ## Usage
 
-### Authentication
-
-First, authenticate with Webex:
+Start the application by running:
 
 ```bash
-webex-terminal auth
+webex-terminal
+```
+
+This will start the application directly. If you're not authenticated, you'll see a welcome message and instructions to use the `/auth` command to authenticate.
+
+### Authentication
+
+To authenticate with Webex, use the `/auth` command within the application:
+
+```
+/auth
 ```
 
 This will open a browser window for OAuth2 authentication. After successful authentication, the token will be stored locally for future sessions.
 
 ### Listing Rooms
 
-To list available rooms:
+To list available rooms, use the `/rooms` command within the application:
 
-```bash
-webex-terminal list-rooms
+```
+/rooms
 ```
 
 To filter rooms by title:
 
-```bash
-webex-terminal list-rooms "filter text"
+```
+/rooms filter text
 ```
 
 This will only display rooms with titles containing the specified filter text.
 
 ### Joining a Room
 
-To join a specific room:
+To join a specific room, use the `/join` command within the application:
 
-```bash
-webex-terminal join-room <room_id>
+```
+/join <room_id>
 ```
 
 or
 
-```bash
-webex-terminal join-room --name "Room Name"
+```
+/join Room Name
 ```
 
 ### Sending Messages

@@ -175,207 +175,14 @@ style = Style.from_dict(
 )
 
 
-@click.group()
+@click.command()
 def cli():
     """Webex Terminal - A terminal client for Cisco Webex.
 
-    This function serves as the main command group for the CLI application.
-    All subcommands are attached to this group.
+    This function serves as the entry point for the CLI application.
+    It starts the application directly, without requiring any arguments.
     """
-    pass
-
-
-@cli.command()
-def auth():
-    """Authenticate with Webex.
-
-    This function handles the authentication process with Webex.
-    It checks for existing authentication, retrieves client credentials
-    from environment variables, and initiates the authentication flow.
-
-    Environment variables required:
-        WEBEX_CLIENT_ID: The client ID from Webex Developer Portal
-        WEBEX_CLIENT_SECRET: The client secret from Webex Developer Portal
-
-    Returns:
-        None
-    """
-    # Check if already authenticated
-    if is_authenticated():
-        click.echo("Already authenticated. Use 'logout' to clear credentials.")
-        return
-
-    # Get client credentials from environment variables
-    client_id = os.environ.get("WEBEX_CLIENT_ID")
-    client_secret = os.environ.get("WEBEX_CLIENT_SECRET")
-
-    if not client_id or not client_secret:
-        click.echo(
-            "Error: WEBEX_CLIENT_ID and WEBEX_CLIENT_SECRET environment variables must be set."
-        )
-        click.echo(
-            "You can obtain these from the Webex Developer Portal: https://developer.webex.com/my-apps"
-        )
-        sys.exit(1)
-
-    # Authenticate
-    click.echo("Authenticating with Webex...")
-    success, error = authenticate(client_id, client_secret)
-
-    if success:
-        click.echo("Authentication successful!")
-    else:
-        click.echo(f"Authentication failed: {error}")
-        sys.exit(1)
-
-
-@cli.command()
-def logout():
-    """Log out from Webex.
-
-    This function clears the stored authentication credentials,
-    effectively logging the user out of Webex.
-
-    Returns:
-        None
-    """
-    auth_logout()
-    click.echo("Logged out successfully.")
-
-
-@cli.command()
-@click.argument("filter_text", required=False)
-def list_rooms(filter_text):
-    """List available Webex rooms.
-
-    This function retrieves and displays all Webex rooms that the
-    authenticated user has access to. It requires authentication
-    before it can be used.
-
-    Args:
-        filter_text (str, optional): Text to filter rooms by. Only rooms with titles
-                                    containing this text will be displayed.
-
-    Returns:
-        None
-
-    Raises:
-        SystemExit: If the user is not authenticated or if there's an API error
-    """
-    # Check if authenticated
-    if not is_authenticated():
-        click.echo("Not authenticated. Please run 'webex-terminal auth' first.")
-        sys.exit(1)
-
-    try:
-        # Get rooms
-        client = WebexClient()
-
-        # Get rooms, applying filter on the server side if provided
-        rooms = client.list_rooms(title_contains=filter_text)
-
-        if not rooms:
-            if filter_text:
-                click.echo(f"No rooms found matching '{filter_text}'.")
-            else:
-                click.echo("No rooms found.")
-            return
-
-        # Display rooms
-        if filter_text:
-            # Display filtered rooms
-            click.echo(f"\nRooms matching '{filter_text}':")
-            click.echo("----------------")
-            for i, room in enumerate(rooms, 1):
-                click.echo(f"{i}. {room['title']} (ID: {room['id']})")
-        else:
-            # No filter, display all rooms using the display_rooms function
-            display_rooms(client, rooms=rooms)
-
-        click.echo()
-
-    except WebexAPIError as e:
-        click.echo(f"Error: {e}")
-        sys.exit(1)
-
-
-@cli.command()
-@click.argument("room_id", required=False)
-@click.option("--name", "-n", help="Room name to join")
-def join_room(room_id, name):
-    """Join a Webex room by ID or name.
-
-    This function allows the user to join a specific Webex room either by its ID
-    or by its name. If neither room_id nor name is provided, it displays a list
-    of available rooms and prompts the user to select one.
-
-    Args:
-        room_id (str, optional): The ID of the room to join.
-        name (str, optional): The name of the room to join.
-
-    Returns:
-        None
-
-    Raises:
-        SystemExit: If the user is not authenticated, if the room cannot be found,
-                   or if there's an API error
-    """
-    # Check if authenticated
-    if not is_authenticated():
-        click.echo("Not authenticated. Please run 'webex-terminal auth' first.")
-        sys.exit(1)
-
-    try:
-        client = WebexClient()
-
-        # Get room by name if specified
-        if name and not room_id:
-            room = client.get_room_by_name(name)
-            if not room:
-                click.echo(f"Room with name '{name}' not found.")
-                sys.exit(1)
-            room_id = room["id"]
-
-        # If no room ID or name provided, show list of rooms
-        if not room_id:
-            rooms = display_rooms(client)
-
-            if not rooms:
-                return
-
-            # Prompt for room selection
-            selection = click.prompt("Enter room number to join", type=int)
-            if selection < 1 or selection > len(rooms):
-                click.echo("Invalid selection.")
-                sys.exit(1)
-
-            room_id = rooms[selection - 1]["id"]
-
-        # Get room details
-        room = client.get_room(room_id)
-
-        # Start the room session
-        asyncio.run(room_session(room))
-
-    except WebexAPIError as e:
-        click.echo(f"Error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        # Handle other exceptions, including websocket connection errors
-        if "Failed to connect to Webex websocket" in str(e):
-            click.echo(f"Error: {e}")
-            click.echo("\nTroubleshooting tips:")
-            click.echo("1. Check your internet connection")
-            click.echo(
-                "2. Verify your authentication by running 'webex-terminal auth' again"
-            )
-            click.echo("3. Check if Webex services are experiencing any outages")
-            click.echo("4. Try again in a few minutes")
-        else:
-            click.echo(f"Error: {e}")
-        sys.exit(1)
-    except KeyboardInterrupt:
-        click.echo("\nExiting...")
+    main()
 
 
 async def room_session(room):
@@ -689,6 +496,7 @@ async def room_session(room):
         print("\nAvailable commands:")
         print("  /exit - Exit the room")
         print("  /help - Show this help message")
+        print("  /auth - Authenticate with Webex")
         print("  /rooms [filter] - List all rooms, optionally filtered by text")
         print("  /teams [filter] - List all teams that you are a member of, optionally filtered by text")
         print("  /spaces <team> - List all spaces in the specified team")
@@ -1910,6 +1718,44 @@ async def room_session(room):
 
         return False
 
+    async def handle_auth_command():
+        """Handle the /auth command.
+
+        This function handles the authentication process with Webex.
+        It checks for existing authentication, retrieves client credentials
+        from environment variables, and initiates the authentication flow.
+
+        Returns:
+            bool: False to indicate the session should continue.
+        """
+        # Check if already authenticated
+        if is_authenticated():
+            print("Already authenticated. Use '/logout' to clear credentials.")
+            return False
+
+        # Get client credentials from environment variables
+        client_id = os.environ.get("WEBEX_CLIENT_ID")
+        client_secret = os.environ.get("WEBEX_CLIENT_SECRET")
+
+        if not client_id or not client_secret:
+            print("Error: WEBEX_CLIENT_ID and WEBEX_CLIENT_SECRET environment variables must be set.")
+            print("You can obtain these from the Webex Developer Portal: https://developer.webex.com/my-apps")
+            return False
+
+        # Authenticate
+        print("Authenticating with Webex...")
+        from webex_terminal.auth.auth import authenticate
+        success, error = authenticate(client_id, client_secret)
+
+        if success:
+            print("Authentication successful!")
+            # Set the exit event to exit the current room session and start a new one
+            exit_event.set()
+            return True
+        else:
+            print(f"Authentication failed: {error}")
+            return False
+
     async def handle_whoami_command():
         """Handle the /whoami command.
 
@@ -2110,6 +1956,8 @@ async def room_session(room):
                         should_break = await handle_person_command(command_parts)
                     elif command == "whoami":
                         should_break = await handle_whoami_command()
+                    elif command == "auth":
+                        should_break = await handle_auth_command()
                     elif command == "thread":
                         should_break = await handle_thread_command(command_parts)
                     else:
@@ -2168,8 +2016,9 @@ def main():
     """Main entry point for the Webex Terminal application.
 
     This function serves as the entry point for the application when run from
-    the command line. It calls the CLI command group and handles any exceptions
-    that might occur during execution.
+    the command line. It starts the application directly, without requiring
+    auth, list-rooms, or join-room arguments. If the user is not authenticated,
+    they can use the /auth command within the application.
 
     Returns:
         None
@@ -2178,7 +2027,25 @@ def main():
         SystemExit: If an unhandled exception occurs during execution
     """
     try:
-        cli()
+        # Check if authenticated
+        if is_authenticated():
+            # Create a dummy room to start with
+            dummy_room = {
+                "id": "dummy",
+                "title": "Webex Terminal",
+            }
+            asyncio.run(room_session(dummy_room))
+        else:
+            click.echo("Welcome to Webex Terminal!")
+            click.echo("You are not authenticated. Use the /auth command to authenticate.")
+            click.echo("Type /help for a list of available commands.")
+
+            # Create a dummy room to start with
+            dummy_room = {
+                "id": "dummy",
+                "title": "Webex Terminal",
+            }
+            asyncio.run(room_session(dummy_room))
     except Exception as e:
         click.echo(f"Error: {e}")
         sys.exit(1)
