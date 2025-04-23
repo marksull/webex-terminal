@@ -294,14 +294,10 @@ class WebexWebsocket:
                                     )
                                 except asyncio.TimeoutError:
                                     # No message received within timeout, continue the loop
-                                    print(
-                                        "No message received within timeout, checking connection..."
-                                    )
                                     # Send a ping to check if the connection is still alive
                                     try:
                                         pong_waiter = await ws.ping()
                                         await asyncio.wait_for(pong_waiter, timeout=5)
-                                        print("Websocket connection is alive")
                                     except:
                                         print(
                                             "Websocket connection is dead, reconnecting..."
@@ -321,7 +317,6 @@ class WebexWebsocket:
                                 print(f"Websocket connection closed: {e}")
                                 break
                             except asyncio.CancelledError:
-                                print("Message loop cancelled")
                                 raise
                             except Exception as e:
                                 print(
