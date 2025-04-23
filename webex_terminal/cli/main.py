@@ -47,26 +47,26 @@ class HTMLToTextParser(HTMLParser):
         self.in_code = False
 
     def handle_starttag(self, tag, attrs):
-        if tag == 'p':
+        if tag == "p":
             # Add newline before paragraphs if not at the beginning
             if self.result:
-                self.result.append('\n')
-        elif tag == 'br':
-            self.result.append('\n')
-        elif tag == 'code':
+                self.result.append("\n")
+        elif tag == "br":
+            self.result.append("\n")
+        elif tag == "code":
             self.in_code = True
-            self.result.append('`')
+            self.result.append("`")
 
     def handle_endtag(self, tag):
-        if tag == 'code':
+        if tag == "code":
             self.in_code = False
-            self.result.append('`')
+            self.result.append("`")
 
     def handle_data(self, data):
         self.result.append(data)
 
     def get_text(self):
-        return ''.join(self.result)
+        return "".join(self.result)
 
 
 def display_image_in_terminal(image_path):
@@ -211,15 +211,204 @@ async def room_session(room):
     # Flag to track if we've joined a real room
     joined_real_room = room["id"] != "dummy"
 
+    # Get user info
+    me = client.get_me()
+
+    # Define message callback
+    async def message_callback(message):
+        """Process incoming messages from the websocket.
+
+        This asynchronous function handles incoming messages from the Webex websocket.
+        It skips messages from the current user, retrieves sender information,
+        and displays the message in the terminal with appropriate formatting.
+
+        Args:
+            message (dict): The message object received from the websocket.
+
+        Returns:
+            None
+        """
+        print(f"\nMessage callback called with message ID: {message.get('id')}")
+        nonlocal last_message_id
+
+        # Store the message ID for threading
+        if "id" in message:
+            last_message_id = message["id"]
+
+        # Skip messages from self
+        if message.get("personId") == me["id"]:
+            print(f"Skipping message from self (personId: {message.get('personId')})")
+            return
+
+        # Get sender info
+        # noinspection PyBroadException
+        try:
+            sender = client.get_person(message["personId"])
+            sender_name = sender.get("displayName", "Unknown")
+        except Exception:
+            sender_name = "Unknown"
+
+        # Print the message
+        # Check for content in html, markdown, and text attributes in that order
+        message_text = message.get(
+            "html", message.get("markdown", message.get("text", ""))
+        )
+        content_type = "text"
+        if message.get("html"):
+            content_type = "html"
+        elif message.get("markdown"):
+            content_type = "markdown"
+
+        # noinspection PyBroadException
+        try:
+            print(f"Processing message with content type: {content_type}")
+            # Yield control back to the event loop before displaying the message
+            await asyncio.sleep(0)
+
+            # Process the message based on content type
+            if content_type == "html":
+                print("Processing HTML content")
+                # For HTML content, we need to convert it to plain text
+                # Use our custom HTML parser to extract text from HTML content
+                parser = HTMLToTextParser()
+                parser.feed(message_text)
+                plain_text = parser.get_text()
+
+                # Escape any HTML in the plain text to prevent injection when using HTML class
+                html_content = html.escape(plain_text)
+                render_as_html = False
+                print(f"Processed HTML content: {html_content[:50]}...")
+            elif content_type == "markdown":
+                print("Processing Markdown content")
+                # Escape any HTML in the original message to prevent injection
+                safe_text = html.escape(message_text)
+                # Convert markdown to HTML
+                html_content = markdown.markdown(safe_text)
+                # Remove surrounding <p> tags if they exist
+                html_content = html_content.strip()
+                if html_content.startswith("<p>") and html_content.endswith("</p>"):
+                    html_content = html_content[3:-4]
+                render_as_html = False
+                print(f"Processed Markdown content: {html_content[:50]}...")
+            else:
+                print("Processing plain text content")
+                # If no html or markdown, just escape the text
+                html_content = html.escape(message_text)
+                render_as_html = False
+                print(f"Processed plain text content: {html_content[:50]}...")
+
+            # Check for file attachments
+            file_info = ""
+            if "files" in message:
+                file_info = "\n[Attachments]:"
+
+                # Process each file attachment
+                for file_url in message.get("files", []):
+                    file_info += f"\n- {file_url}"
+
+                    # Try to download and display image attachments
+                    try:
+                        # Download the file
+                        file_path = client.download_file_from_url(file_url)
+
+                        # Check if it's an image file based on extension or content type
+                        image_extensions = [
+                            ".jpg",
+                            ".jpeg",
+                            ".png",
+                            ".gif",
+                            ".bmp",
+                            ".webp",
+                        ]
+                        is_image = any(
+                            file_path.lower().endswith(ext) for ext in image_extensions
+                        )
+
+                        # If we couldn't determine from extension, try to check the file content
+                        if not is_image:
+                            import imghdr
+
+                            img_type = imghdr.what(file_path)
+                            is_image = img_type is not None
+
+                        # If it's an image, display it
+                        if is_image:
+                            # Display the image
+                            display_image_in_terminal(file_path)
+                    except Exception as e:
+                        file_info += f"\n  Error processing attachment: {e}"
+
+                # Add debug information if debug mode is enabled
+                if debug_mode:
+                    file_info += (
+                        f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
+                    )
+
+            print("About to display message")
+
+            # Force a flush of stdout before patching
+            sys.stdout.flush()
+
+            # Use a separate patch_stdout context to ensure clean output
+            print("DEBUG: About to enter patch_stdout context")
+            with patch_stdout(raw=True):
+                # Load config to check if sound is enabled
+                config = load_config()
+
+                # Play bell sound if enabled
+                if config.get("sound_enabled", True):
+                    print("\a", end="", flush=True)  # \a is the ASCII bell character
+                    print("DEBUG: Bell sound played")
+
+                # Format message with sender name as prefix, keeping the styling
+                # For all content types, wrap in message tags
+                print("Displaying message with print_formatted_text")
+
+                # Print a newline first to ensure clean formatting
+                print("\n", end="", flush=True)
+
+                # Use prompt_toolkit's print_formatted_text for better integration with the prompt
+                print(
+                    f"DEBUG: About to display message from {sender_name} with content length {len(html_content)}"
+                )
+
+                # Use a more direct approach that's guaranteed to be visible
+                print(f"\n\n>>> {sender_name}: {html_content}\n", flush=True)
+
+                print("DEBUG: Message displayed with direct print")
+
+                # Force another flush to ensure the message is displayed
+                sys.stdout.flush()
+                print("DEBUG: stdout flushed")
+
+                # Redisplay the prompt to maintain user experience
+                room_display = (
+                    "no room joined" if room["id"] == "dummy" else room["title"]
+                )
+                print(f"\n{me['displayName']}@{room_display}> ", end="", flush=True)
+                print("DEBUG: Prompt redisplayed")
+
+                print("Message display completed", flush=True)
+
+            # Yield control back to the event loop after displaying the message
+            await asyncio.sleep(0)
+        except Exception as e:
+            # Print the exception for debugging
+            print(f"\nError processing message: {e}")
+            import traceback
+
+            print(f"Exception traceback: {traceback.format_exc()}")
+            pass
+
     # Only create websocket client if we're joining a real room
     if joined_real_room:
-        websocket = await create_websocket_client()
+        # Create websocket client with the message callback
+        websocket = await create_websocket_client(message_callback)
         # Set the current room - prefer globalId if available, otherwise use id
         room_id = room.get("globalId", room["id"])
         websocket.set_room(room_id)
 
-    # Get user info
-    me = client.get_me()
+        # User info already retrieved above
 
     # Debug mode flag - controls whether to display message payload for debugging
     debug_mode = False
@@ -328,161 +517,7 @@ async def room_session(room):
     exit_event = asyncio.Event()
     new_room = None
 
-    # Define message callback
-    async def message_callback(message):
-        """Process incoming messages from the websocket.
-
-        This asynchronous function handles incoming messages from the Webex websocket.
-        It skips messages from the current user, retrieves sender information,
-        and displays the message in the terminal with appropriate formatting.
-
-        Args:
-            message (dict): The message object received from the websocket.
-
-        Returns:
-            None
-        """
-        nonlocal last_message_id
-
-        # Store the message ID for threading
-        if "id" in message:
-            last_message_id = message["id"]
-
-        # Skip messages from self
-        if message.get("personId") == me["id"]:
-            return
-
-        # Get sender info
-        # noinspection PyBroadException
-        try:
-            sender = client.get_person(message["personId"])
-            sender_name = sender.get("displayName", "Unknown")
-        except Exception:
-            sender_name = "Unknown"
-
-        # Print the message
-        # Check for content in html, markdown, and text attributes in that order
-        message_text = message.get("html", message.get("markdown", message.get("text", "")))
-        content_type = "text"
-        if message.get("html"):
-            content_type = "html"
-        elif message.get("markdown"):
-            content_type = "markdown"
-
-        # noinspection PyBroadException
-        try:
-            # Yield control back to the event loop before displaying the message
-            await asyncio.sleep(0)
-
-            # Process the message based on content type
-            if content_type == "html":
-                # For HTML content, we need to convert it to plain text
-                # Use our custom HTML parser to extract text from HTML content
-                parser = HTMLToTextParser()
-                parser.feed(message_text)
-                plain_text = parser.get_text()
-
-                # Escape any HTML in the plain text to prevent injection when using HTML class
-                html_content = html.escape(plain_text)
-                render_as_html = False
-            elif content_type == "markdown":
-                # Escape any HTML in the original message to prevent injection
-                safe_text = html.escape(message_text)
-                # Convert markdown to HTML
-                html_content = markdown.markdown(safe_text)
-                # Remove surrounding <p> tags if they exist
-                html_content = html_content.strip()
-                if html_content.startswith("<p>") and html_content.endswith("</p>"):
-                    html_content = html_content[3:-4]
-                render_as_html = False
-            else:
-                # If no html or markdown, just escape the text
-                html_content = html.escape(message_text)
-                render_as_html = False
-
-            # Check for file attachments
-            file_info = ""
-            if "files" in message:
-                file_info = "\n[Attachments]:"
-
-                # Process each file attachment
-                for file_url in message.get("files", []):
-                    file_info += f"\n- {file_url}"
-
-                    # Try to download and display image attachments
-                    try:
-                        # Download the file
-                        file_path = client.download_file_from_url(file_url)
-
-                        # Check if it's an image file based on extension or content type
-                        image_extensions = [
-                            ".jpg",
-                            ".jpeg",
-                            ".png",
-                            ".gif",
-                            ".bmp",
-                            ".webp",
-                        ]
-                        is_image = any(
-                            file_path.lower().endswith(ext) for ext in image_extensions
-                        )
-
-                        # If we couldn't determine from extension, try to check the file content
-                        if not is_image:
-                            import imghdr
-
-                            img_type = imghdr.what(file_path)
-                            is_image = img_type is not None
-
-                        # If it's an image, display it
-                        if is_image:
-                            # Display the image
-                            display_image_in_terminal(file_path)
-                    except Exception as e:
-                        file_info += f"\n  Error processing attachment: {e}"
-
-                # Add debug information if debug mode is enabled
-                if debug_mode:
-                    file_info += (
-                        f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
-                    )
-
-            with patch_stdout():
-                # Load config to check if sound is enabled
-                config = load_config()
-
-                # Play bell sound if enabled
-                if config.get("sound_enabled", True):
-                    print("\a", end="", flush=True)  # \a is the ASCII bell character
-
-                # Format message with sender name as prefix, keeping the styling
-                # For all content types, wrap in message tags
-                print_formatted_text(
-                    HTML(
-                        f"\n<username>{sender_name}</username>: <message>{html_content}</message>"
-                    ),
-                    style=style,
-                )
-
-                # Redisplay the prompt after the message
-                print_formatted_text(
-                    HTML(
-                        f"<username>{me['displayName']}</username>@<room>{room['title']}</room>> "
-                    ),
-                    style=style,
-                    end="",
-                )
-
-            # Yield control back to the event loop after displaying the message
-            await asyncio.sleep(0)
-        except Exception as e:
-            # Print the exception for debugging
-            print(f"\nError processing message: {e}")
-            pass
-
-    # Set message callback if websocket client exists
-    if websocket:
-        websocket.on_message(message_callback)
+    # Note: Message callback is now set during websocket client creation
 
     # Helper methods for handling commands
     async def handle_exit_command():
@@ -511,12 +546,16 @@ async def room_session(room):
         print("  /help - Show this help message")
         print("  /auth - Authenticate with Webex")
         print("  /rooms [filter] - List all rooms, optionally filtered by text")
-        print("  /teams [filter] - List all teams that you are a member of, optionally filtered by text")
+        print(
+            "  /teams [filter] - List all teams that you are a member of, optionally filtered by text"
+        )
         print("  /spaces <team> - List all spaces in the specified team")
         print("  /members - List all members in the current room")
         print("  /add <email_address> - Add a user to the current room")
         print("  /details - Display details about the current room")
-        print("  /join <room_id or name or number> - Join another room by ID, exact name, partial name, or number from the most recent /rooms list")
+        print(
+            "  /join <room_id or name or number> - Join another room by ID, exact name, partial name, or number from the most recent /rooms list"
+        )
         print("  /files - List all files in the current room with their IDs")
         print("  /links - List all links shared in the current room")
         print("  /urls - List all tabs (URLs) associated with the current room")
@@ -527,7 +566,9 @@ async def room_session(room):
         print(
             "  /open <filename> - Download and open a file from the current room with the default application"
         )
-        print("  /person <text> - Search for people by email (if text contains @) or display name")
+        print(
+            "  /person <text> - Search for people by email (if text contains @) or display name"
+        )
         print("  /whoami - Display detailed information about your Webex user account")
         print("  /delete - Delete the last message you sent in the room")
         print("  /debug - Toggle debug mode to show/hide message payloads")
@@ -636,7 +677,9 @@ async def room_session(room):
 
         # If no exact match, try partial name match
         if not target_team:
-            matching_teams = [t for t in teams if team_identifier.lower() in t["name"].lower()]
+            matching_teams = [
+                t for t in teams if team_identifier.lower() in t["name"].lower()
+            ]
             if len(matching_teams) == 1:
                 target_team = matching_teams[0]
             elif len(matching_teams) > 1:
@@ -993,7 +1036,7 @@ async def room_session(room):
 
                 # Create websocket client if it doesn't exist yet
                 if websocket is None:
-                    websocket = await create_websocket_client()
+                    websocket = await create_websocket_client(message_callback)
 
                 # Set the new room ID on the websocket client
                 room_id = temp_room.get("globalId", temp_room["id"])
@@ -1009,7 +1052,9 @@ async def room_session(room):
                 # No need to exit the current room session
                 return False
             else:
-                print(f"Error: Room number {room_number} is not valid. Use /rooms to see available rooms.")
+                print(
+                    f"Error: Room number {room_number} is not valid. Use /rooms to see available rooms."
+                )
                 return False
 
         # First try to get the room by ID
@@ -1018,7 +1063,7 @@ async def room_session(room):
 
             # Create websocket client if it doesn't exist yet
             if websocket is None:
-                websocket = await create_websocket_client()
+                websocket = await create_websocket_client(message_callback)
 
             # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
@@ -1042,7 +1087,7 @@ async def room_session(room):
         if temp_room:
             # Create websocket client if it doesn't exist yet
             if websocket is None:
-                websocket = await create_websocket_client()
+                websocket = await create_websocket_client(message_callback)
 
             # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
@@ -1070,7 +1115,7 @@ async def room_session(room):
 
             # Create websocket client if it doesn't exist yet
             if websocket is None:
-                websocket = await create_websocket_client()
+                websocket = await create_websocket_client(message_callback)
 
             # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
@@ -1105,7 +1150,7 @@ async def room_session(room):
 
             # Create websocket client if it doesn't exist yet
             if websocket is None:
-                websocket = await create_websocket_client()
+                websocket = await create_websocket_client(message_callback)
 
             # Set the new room ID on the websocket client
             room_id = temp_room.get("globalId", temp_room["id"])
@@ -1529,7 +1574,9 @@ async def room_session(room):
                 # Calculate column widths based on terminal width
                 # Use proportions: Name (30%), URL (70%)
                 # Ensure minimum width of 80 characters
-                effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+                effective_width = max(
+                    terminal_width - 5, 80
+                )  # Subtract 5 for table borders and padding
 
                 name_width = int(effective_width * 0.30)
                 url_width = effective_width - name_width
@@ -1546,7 +1593,9 @@ async def room_session(room):
                 # Add tab rows
                 for tab in tabs:
                     # Try different field names for the tab name
-                    tab_name = tab.get("displayName", tab.get("title", tab.get("name", "Unnamed")))
+                    tab_name = tab.get(
+                        "displayName", tab.get("title", tab.get("name", "Unnamed"))
+                    )
                     table.add_row([tab_name, tab.get("contentUrl", "")])
 
                 # Print the table
@@ -1571,12 +1620,14 @@ async def room_session(room):
                     # Truncate URL if it's too long for display
                     url = tab.get("contentUrl", "")
                     if len(url) > url_width:
-                        url = url[:url_width-3] + "..."
+                        url = url[: url_width - 3] + "..."
 
                     # Try different field names for the tab name
-                    tab_name = tab.get("displayName", tab.get("title", tab.get("name", "Unnamed")))
+                    tab_name = tab.get(
+                        "displayName", tab.get("title", tab.get("name", "Unnamed"))
+                    )
                     if len(tab_name) > name_width:
-                        tab_name = tab_name[:name_width-3] + "..."
+                        tab_name = tab_name[: name_width - 3] + "..."
 
                     print(header_format.format(tab_name, url))
 
@@ -1603,7 +1654,7 @@ async def room_session(room):
                 return False
 
             # Regular expression to find URLs in text
-            url_pattern = re.compile(r'https?://\S+')
+            url_pattern = re.compile(r"https?://\S+")
 
             # List to store found links
             links = []
@@ -1635,12 +1686,14 @@ async def room_session(room):
                         # Just take the date part (first 10 characters)
                         created = created[:10]
 
-                    links.append({
-                        "url": url,
-                        "sender": sender_name,
-                        "created": created,
-                        "message_id": message.get("id", "")
-                    })
+                    links.append(
+                        {
+                            "url": url,
+                            "sender": sender_name,
+                            "created": created,
+                            "message_id": message.get("id", ""),
+                        }
+                    )
 
             # Display the links
             if not links:
@@ -1654,7 +1707,9 @@ async def room_session(room):
                     # Calculate column widths based on terminal width
                     # Use proportions: URL (60%), Sender (25%), Date (15%)
                     # Ensure minimum width of 80 characters
-                    effective_width = max(terminal_width - 5, 80)  # Subtract 5 for table borders and padding
+                    effective_width = max(
+                        terminal_width - 5, 80
+                    )  # Subtract 5 for table borders and padding
 
                     url_width = int(effective_width * 0.60)
                     sender_width = int(effective_width * 0.25)
@@ -1683,11 +1738,15 @@ async def room_session(room):
                     print("-" * terminal_width)
 
                     # Create header format string with dynamic widths
-                    header_format = f"{{:<{url_width}}} {{:<{sender_width}}} {{:<{date_width}}}"
+                    header_format = (
+                        f"{{:<{url_width}}} {{:<{sender_width}}} {{:<{date_width}}}"
+                    )
                     print(header_format.format("URL", "Shared By", "Date"))
 
                     # Create a separator line
-                    separator_format = f"{{:-<{url_width}}} {{:-<{sender_width}}} {{:-<{date_width}}}"
+                    separator_format = (
+                        f"{{:-<{url_width}}} {{:-<{sender_width}}} {{:-<{date_width}}}"
+                    )
                     print(separator_format.format("", "", ""))
 
                     # Print each link
@@ -1695,9 +1754,11 @@ async def room_session(room):
                         # Truncate URL if it's too long for display
                         url = link["url"]
                         if len(url) > url_width:
-                            url = url[:url_width-3] + "..."
+                            url = url[: url_width - 3] + "..."
 
-                        print(header_format.format(url, link["sender"], link["created"]))
+                        print(
+                            header_format.format(url, link["sender"], link["created"])
+                        )
 
         except WebexAPIError as e:
             print(f"\nError retrieving messages: {e}")
@@ -1774,7 +1835,11 @@ async def room_session(room):
             # Add people rows
             for person in people:
                 display_name = person.get("displayName", "Unknown")
-                email = person.get("emails", ["Unknown"])[0] if person.get("emails") else "Unknown"
+                email = (
+                    person.get("emails", ["Unknown"])[0]
+                    if person.get("emails")
+                    else "Unknown"
+                )
                 title = person.get("title", "Unknown")
                 status = person.get("status", "Unknown")
 
@@ -1786,7 +1851,9 @@ async def room_session(room):
             print(table.draw())
 
         except ImportError:
-            print("\nError: texttable module not found. Please install it with 'pip install texttable'.")
+            print(
+                "\nError: texttable module not found. Please install it with 'pip install texttable'."
+            )
         except WebexAPIError as e:
             print(f"\nError searching for people: {e}")
 
@@ -1812,13 +1879,18 @@ async def room_session(room):
         client_secret = os.environ.get("WEBEX_CLIENT_SECRET")
 
         if not client_id or not client_secret:
-            print("Error: WEBEX_CLIENT_ID and WEBEX_CLIENT_SECRET environment variables must be set.")
-            print("You can obtain these from the Webex Developer Portal: https://developer.webex.com/my-apps")
+            print(
+                "Error: WEBEX_CLIENT_ID and WEBEX_CLIENT_SECRET environment variables must be set."
+            )
+            print(
+                "You can obtain these from the Webex Developer Portal: https://developer.webex.com/my-apps"
+            )
             return False
 
         # Authenticate
         print("Authenticating with Webex...")
         from webex_terminal.auth.auth import authenticate
+
         success, error = authenticate(client_id, client_secret)
 
         if success:
@@ -1858,10 +1930,14 @@ async def room_session(room):
                         formatted_value = ", ".join(value)
                     else:
                         # For complex lists, print each item on a new line
-                        formatted_value = "\n  - " + "\n  - ".join(str(item) for item in value)
+                        formatted_value = "\n  - " + "\n  - ".join(
+                            str(item) for item in value
+                        )
                 elif isinstance(value, dict):
                     # For dictionaries, format as key-value pairs
-                    formatted_value = "\n  - " + "\n  - ".join(f"{k}: {v}" for k, v in value.items())
+                    formatted_value = "\n  - " + "\n  - ".join(
+                        f"{k}: {v}" for k, v in value.items()
+                    )
                 else:
                     # For simple values, just convert to string
                     formatted_value = str(value)
@@ -1911,7 +1987,10 @@ async def room_session(room):
                 try:
                     # Pass the text as both plain text and markdown with the parentId
                     response = client.create_message(
-                        room["id"], message_text, markdown=message_text, parent_id=last_message_id
+                        room["id"],
+                        message_text,
+                        markdown=message_text,
+                        parent_id=last_message_id,
                     )
                     print("Message sent as a thread reply.")
                 except WebexAPIError as e:
@@ -1992,7 +2071,9 @@ async def room_session(room):
 
                     with patch_stdout():
                         # Use "no room joined" instead of room title for dummy room
-                        room_display = "no room joined" if room["id"] == "dummy" else room['title']
+                        room_display = (
+                            "no room joined" if room["id"] == "dummy" else room["title"]
+                        )
                         text = await session.prompt_async(
                             HTML(
                                 f"<username>{me['displayName']}</username>@<room>{room_display}</room>> "
@@ -2151,7 +2232,9 @@ def main():
             click.echo("Type /help for a list of available commands.")
         else:
             click.echo("Welcome to Webex Terminal!")
-            click.echo("You are not authenticated. Use the /auth command to authenticate.")
+            click.echo(
+                "You are not authenticated. Use the /auth command to authenticate."
+            )
             click.echo("After authentication, use the /join command to join a room.")
             click.echo("Type /help for a list of available commands.")
 

@@ -24,6 +24,7 @@ class HydraTypes(Enum):
         MESSAGE: Represents a standard message.
         ATTACHMENT_ACTION: Represents an action on an attachment.
     """
+
     MESSAGE = "MESSAGE"
     ATTACHMENT_ACTION = "ATTACHMENT_ACTION"
 
@@ -48,11 +49,15 @@ class WebexWebsocket:
         last_error: The last error encountered.
     """
 
-    def __init__(self):
+    def __init__(self, message_callback=None):
         """Initialize the websocket client.
 
         This method initializes the WebexWebsocket instance by setting up the
         necessary attributes with default values.
+
+        Args:
+            message_callback (Callable[[Dict], Any], optional): The callback function to be called
+                with the message data when a new message is received. Defaults to None.
 
         Returns:
             None
@@ -61,7 +66,7 @@ class WebexWebsocket:
         self.websocket = None
         self.device_info = None
         self.running = False
-        self.message_callback = None
+        self.message_callback = message_callback
         self.current_room_id = None
         self.message_loop_task = None
         self.reconnection_count = 0
@@ -98,13 +103,13 @@ class WebexWebsocket:
 
             # Create a device registration
             data = {
-                'deviceName': 'Webex Terminal',
-                'deviceType': 'DESKTOP',
-                'localizedModel': 'Desktop',
-                'model': 'Desktop',
-                'name': f"Webex Terminal - {me['displayName']}",
-                'systemName': 'Python',
-                'systemVersion': '1.0',
+                "deviceName": "Webex Terminal",
+                "deviceType": "DESKTOP",
+                "localizedModel": "Desktop",
+                "model": "Desktop",
+                "name": f"Webex Terminal - {me['displayName']}",
+                "systemName": "Python",
+                "systemVersion": "1.0",
             }
 
             # Use the specific URL for device registration
@@ -123,7 +128,7 @@ class WebexWebsocket:
                 error_msg = str(e)
                 try:
                     error_json = response.json()
-                    if 'message' in error_json:
+                    if "message" in error_json:
                         error_msg = f"{error_msg} - {error_json['message']}"
                 except:
                     pass
@@ -180,16 +185,40 @@ class WebexWebsocket:
         await self._cleanup_resources()
 
         try:
+            print("Connecting to Webex websocket...")
+
+            # Yield control back to the event loop before getting device info
+            await asyncio.sleep(0)
+
             # Get the device info
             device_info = await self._get_device_info()
-            websocket_url = device_info.get('webSocketUrl')
+            websocket_url = device_info.get("webSocketUrl")
 
             if not websocket_url:
                 raise ValueError("No websocket URL found in device info")
 
+            print(f"Got websocket URL: {websocket_url}")
+
+            # Yield control back to the event loop before starting message loop
+            await asyncio.sleep(0)
+
             self.running = True
+            print("Starting message loop task...")
             self.message_loop_task = asyncio.create_task(self._message_loop())
 
+            # Wait a moment to ensure the task has started
+            await asyncio.sleep(1)
+
+            # Check if the task is still running or if it failed immediately
+            if self.message_loop_task.done():
+                exception = self.message_loop_task.exception()
+                if exception:
+                    raise exception
+                else:
+                    print("Message loop task completed unexpectedly")
+                    return False
+
+            print("Websocket connection established successfully")
             return True
         except Exception as e:
             self.running = False
@@ -205,7 +234,9 @@ class WebexWebsocket:
         if self.message_loop_task and not self.message_loop_task.done():
             self.message_loop_task.cancel()
             try:
-                await asyncio.wait_for(asyncio.shield(self.message_loop_task), timeout=2.0)
+                await asyncio.wait_for(
+                    asyncio.shield(self.message_loop_task), timeout=2.0
+                )
             except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
                 pass
             finally:
@@ -235,7 +266,7 @@ class WebexWebsocket:
                 try:
                     # Get the device info and websocket URL
                     device_info = await self._get_device_info()
-                    websocket_url = device_info.get('webSocketUrl')
+                    websocket_url = device_info.get("webSocketUrl")
 
                     if not websocket_url:
                         await asyncio.sleep(5)
@@ -254,7 +285,7 @@ class WebexWebsocket:
                         auth_msg = {
                             "id": str(uuid.uuid4()),
                             "type": "authorization",
-                            "data": {"token": "Bearer " + token_data['access_token']}
+                            "data": {"token": "Bearer " + token_data["access_token"]},
                         }
 
                         await ws.send(json.dumps(auth_msg))
@@ -265,17 +296,57 @@ class WebexWebsocket:
                         # Process messages
                         while self.running:
                             try:
-                                message = await ws.recv()
+                                # Yield control back to the event loop before receiving message
+                                await asyncio.sleep(0)
+
+                                # Print debug message to show we're waiting for messages
+                                print("Waiting for websocket messages...")
+
+                                # Receive message with a timeout to prevent blocking indefinitely
+                                try:
+                                    message = await asyncio.wait_for(
+                                        ws.recv(), timeout=30
+                                    )
+                                    print("Received websocket message")
+                                except asyncio.TimeoutError:
+                                    # No message received within timeout, continue the loop
+                                    print(
+                                        "No message received within timeout, checking connection..."
+                                    )
+                                    # Send a ping to check if the connection is still alive
+                                    try:
+                                        pong_waiter = await ws.ping()
+                                        await asyncio.wait_for(pong_waiter, timeout=5)
+                                        print("Websocket connection is alive")
+                                    except:
+                                        print(
+                                            "Websocket connection is dead, reconnecting..."
+                                        )
+                                        break
+                                    continue
+
+                                # Yield control back to the event loop after receiving message
+                                await asyncio.sleep(0)
 
                                 # Process the message in the current task
                                 await self._process_message(message)
-                            except websockets.exceptions.ConnectionClosed:
+
+                                # Yield control back to the event loop after processing message
+                                await asyncio.sleep(0)
+                            except websockets.exceptions.ConnectionClosed as e:
+                                print(f"Websocket connection closed: {e}")
                                 break
                             except asyncio.CancelledError:
+                                print("Message loop cancelled")
                                 raise
-                            except Exception:
+                            except Exception as e:
+                                print(
+                                    f"Error in message loop: {e.__class__.__name__}: {str(e)}"
+                                )
+                                # Yield control back to the event loop after an error
+                                await asyncio.sleep(0)
                                 # Continue to next message
-                                pass
+                                continue
 
                 except asyncio.CancelledError:
                     raise
@@ -284,24 +355,34 @@ class WebexWebsocket:
                     self.last_error = e
 
                     # Print detailed error information for debugging
-                    print(f"Websocket message loop error: {e.__class__.__name__}: {str(e)}")
+                    print(
+                        f"Websocket message loop error: {e.__class__.__name__}: {str(e)}"
+                    )
+
+                    # No need to store and restore the callback as it's now passed directly to the constructor
 
                     # Increment reconnection count
                     self.reconnection_count += 1
 
                     if self.reconnection_count >= self.max_reconnection_count:
-                        print(f"Maximum reconnection attempts ({self.max_reconnection_count}) reached. Giving up.")
+                        print(
+                            f"Maximum reconnection attempts ({self.max_reconnection_count}) reached. Giving up."
+                        )
                         print(f"Last error: {e.__class__.__name__}: {str(e)}")
                         break
 
                     # Wait before retrying
-                    retry_delay = min(30, 2 ** self.reconnection_count)
-                    print(f"Reconnecting in {retry_delay} seconds (attempt {self.reconnection_count}/{self.max_reconnection_count})...")
+                    retry_delay = min(30, 2**self.reconnection_count)
+                    print(
+                        f"Reconnecting in {retry_delay} seconds (attempt {self.reconnection_count}/{self.max_reconnection_count})..."
+                    )
 
                     try:
                         await asyncio.sleep(retry_delay)
                     except asyncio.CancelledError:
                         raise
+
+                    # No need to restore the callback as it's now passed directly to the constructor
 
                 # Clear websocket reference
                 self.websocket = None
@@ -322,47 +403,100 @@ class WebexWebsocket:
 
             # Handle the message
             await self._handle_message(data)
-        except Exception:
-            pass
+        except Exception as e:
+            # Log the error instead of silently ignoring it
+            print(f"Error processing message: {e.__class__.__name__}: {str(e)}")
+            # Yield control back to the event loop
+            await asyncio.sleep(0)
 
     async def _handle_message(self, data: Dict):
         """Handle a websocket message."""
-        # Check if this is an activity event
-        event_type = data.get('data', {}).get('eventType')
+        try:
+            # Yield control back to the event loop at the start of message handling
+            await asyncio.sleep(0)
 
-        if event_type == 'conversation.activity':
-            activity = data['data']['activity']
+            # Check if this is an activity event
+            event_type = data.get("data", {}).get("eventType")
 
-            # Check if this is a message event - accept both 'post' and 'share' verbs
-            verb = activity.get('verb')
+            # Debug print to see what events we're receiving
+            print(f"Received event type: {event_type}")
 
-            if verb in ['post', 'share'] and self.message_callback:
-                # Get the message details - use the ID from the activity
-                message_id = activity.get('id')
+            if event_type == "conversation.activity":
+                activity = data["data"]["activity"]
 
-                # Try different locations for the room ID
-                room_id = activity.get('target', {}).get('globalId')
+                # Check if this is a message event - accept both 'post' and 'share' verbs
+                verb = activity.get("verb")
 
-                if not room_id:
-                    # Fallback to target.id if globalId is not available
-                    room_id = activity.get('target', {}).get('id')
+                # Debug print to see what verbs we're receiving
+                print(f"Activity verb: {verb}")
 
-                if not room_id:
-                    # Try to get room ID from the 'object' field if available
-                    room_id = activity.get('object', {}).get('roomId')
+                # Check if this is a message event (post or share)
+                if verb in ["post", "share"]:
+                    # Process the message regardless of callback status for debugging
+                    # Get the message details - use the ID from the activity
+                    message_id = activity.get("id")
 
-                # Only process messages for the current room and if we have a valid message ID
-                if room_id == self.current_room_id and message_id:
-                    try:
-                        # Get the full message details - convert UUID to Hydra ID first
-                        hydra_id = self.build_hydra_id(message_id)
-                        message = self.client.get_message(hydra_id)
+                    # Try different locations for the room ID
+                    room_id = activity.get("target", {}).get("globalId")
 
-                        # Call the callback with the message
-                        await self.message_callback(message)
+                    if not room_id:
+                        # Fallback to target.id if globalId is not available
+                        room_id = activity.get("target", {}).get("id")
 
-                    except WebexAPIError:
-                        pass
+                    if not room_id:
+                        # Try to get room ID from the 'object' field if available
+                        room_id = activity.get("object", {}).get("roomId")
+
+                    # Debug print to see room IDs
+                    print(
+                        f"Message for room: {room_id}, current room: {self.current_room_id}"
+                    )
+
+                    # Only process messages for the current room and if we have a valid message ID
+                    if room_id == self.current_room_id and message_id:
+                        try:
+                            # Yield control back to the event loop before getting message details
+                            await asyncio.sleep(0)
+
+                            # Get the full message details - convert UUID to Hydra ID first
+                            hydra_id = self.build_hydra_id(message_id)
+                            print(f"Getting message details for ID: {message_id}")
+                            message = self.client.get_message(hydra_id)
+
+                            # Yield control back to the event loop after getting message details
+                            await asyncio.sleep(0)
+
+                            # Check if callback is set and log its status
+                            if self.message_callback:
+                                print(f"Calling message callback for message: {message.get('id')}")
+                                try:
+                                    await self.message_callback(message)
+                                    print(f"Message callback completed successfully for message: {message.get('id')}")
+                                except Exception as e:
+                                    print(f"Error in message callback execution: {e.__class__.__name__}: {str(e)}")
+                                    import traceback
+                                    print(f"Callback error traceback: {traceback.format_exc()}")
+                            else:
+                                print(f"WARNING: Message callback is not set. Messages cannot be displayed.")
+                                print(f"This is likely a bug. Please report this issue.")
+
+                            # Yield control back to the event loop after callback
+                            await asyncio.sleep(0)
+
+                        except WebexAPIError as e:
+                            print(f"WebexAPIError getting message: {e}")
+                        except Exception as e:
+                            print(
+                                f"Error in message callback: {e.__class__.__name__}: {str(e)}"
+                            )
+
+            # Yield control back to the event loop at the end of message handling
+            await asyncio.sleep(0)
+
+        except Exception as e:
+            print(f"Error handling message: {e.__class__.__name__}: {str(e)}")
+            # Yield control back to the event loop after an error
+            await asyncio.sleep(0)
 
     def set_room(self, room_id: str):
         """Set the current room to listen for messages.
@@ -393,34 +527,25 @@ class WebexWebsocket:
             str: The encoded UUID in Hydra ID format.
         """
         return (
-            base64.b64encode(f"{self.HYDRA_PREFIX}/{message_type}/{uuid}".encode("ascii")).decode(
-                "ascii"
-            )
+            base64.b64encode(
+                f"{self.HYDRA_PREFIX}/{message_type}/{uuid}".encode("ascii")
+            ).decode("ascii")
             if "-" in uuid
             else uuid
         )
 
-    def on_message(self, callback: Callable[[Dict], Any]):
-        """Set the callback for new messages.
-
-        This method sets the callback function that will be called when a new
-        message is received from the websocket.
-
-        Args:
-            callback (Callable[[Dict], Any]): The callback function to be called
-                with the message data when a new message is received.
-
-        Returns:
-            None
-        """
-        self.message_callback = callback
+    # The on_message method has been removed as we now pass the callback directly to the constructor
 
 
-async def create_websocket_client() -> WebexWebsocket:
+async def create_websocket_client(message_callback=None) -> WebexWebsocket:
     """Create and connect a websocket client.
 
     This asynchronous function creates a new WebexWebsocket instance and
     establishes a connection to the Webex websocket service.
+
+    Args:
+        message_callback (Callable[[Dict], Any], optional): The callback function to be called
+            with the message data when a new message is received. Defaults to None.
 
     Returns:
         WebexWebsocket: A connected websocket client.
@@ -428,31 +553,66 @@ async def create_websocket_client() -> WebexWebsocket:
     Raises:
         Exception: If there's an error during connection.
     """
-    client = WebexWebsocket()
+    print("Creating new Webex websocket client...")
+    print(f"Using message callback: {message_callback}")
+    client = WebexWebsocket(message_callback)
 
     try:
         # Yield control back to the event loop before connecting
         await asyncio.sleep(0)
 
-        success = await client.connect()
+        # Try to connect with multiple attempts
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            print(f"Connection attempt {attempt}/{max_attempts}...")
+
+            success = await client.connect()
+            if success:
+                print("Successfully connected to Webex websocket")
+                break
+
+            if attempt < max_attempts:
+                # Wait before retrying
+                retry_delay = 2**attempt  # Exponential backoff
+                print(f"Connection failed, retrying in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+
         if not success:
             # Check if we have a specific error stored
-            if hasattr(client, 'last_error') and client.last_error:
-                error_details = f"{client.last_error.__class__.__name__}: {str(client.last_error)}"
-                raise Exception(f"Failed to connect to Webex websocket: {error_details}")
+            if hasattr(client, "last_error") and client.last_error:
+                error_details = (
+                    f"{client.last_error.__class__.__name__}: {str(client.last_error)}"
+                )
+                raise Exception(
+                    f"Failed to connect to Webex websocket after {max_attempts} attempts: {error_details}"
+                )
             else:
-                raise Exception("Failed to connect to Webex websocket. Please check your network connection and authentication.")
+                raise Exception(
+                    f"Failed to connect to Webex websocket after {max_attempts} attempts. Please check your network connection and authentication."
+                )
 
         # Yield control back to the event loop after connecting
         await asyncio.sleep(0)
 
+        # Verify that the message loop task is running
+        if client.message_loop_task and client.message_loop_task.done():
+            exception = client.message_loop_task.exception()
+            if exception:
+                raise Exception(f"Message loop task failed: {exception}")
+            else:
+                raise Exception("Message loop task completed unexpectedly")
+
+        # The callback is now passed directly to the constructor, so no need to check if it's set
+
         return client
     except Exception as e:
+        print(f"Error creating websocket client: {e.__class__.__name__}: {str(e)}")
+
         # Make sure to clean up resources if connection fails
         try:
             await client.disconnect()
-        except Exception:
-            pass
+        except Exception as cleanup_error:
+            print(f"Error during cleanup: {cleanup_error}")
 
         # Re-raise with more detailed error information
         if str(e).startswith("Failed to connect to Webex websocket"):
