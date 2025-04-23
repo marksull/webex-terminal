@@ -125,12 +125,12 @@ class WebexClient:
             return {}
 
     def _paginated_get(self, url: str, params: Dict = None, item_key: str = "items", 
-                       filter_func=None) -> List[Dict]:
+                       filter_func=None, max_items: int = None) -> List[Dict]:
         """Make a paginated GET request to the Webex API.
 
         This method handles pagination automatically by following the "Link" header
-        with rel="next" until all pages have been retrieved. It concatenates the
-        results from all pages into a single list.
+        with rel="next" until all pages have been retrieved or the maximum number of
+        items has been reached. It concatenates the results from all pages into a single list.
 
         Args:
             url (str): The full URL to request.
@@ -142,9 +142,12 @@ class WebexClient:
                                              returns True will be included in the result.
                                              The function should take a single item as input
                                              and return a boolean.
+            max_items (int, optional): Maximum number of items to retrieve. If provided,
+                                      pagination will stop once this many items have been
+                                      collected. Defaults to None (retrieve all items).
 
         Returns:
-            List[Dict]: A list of all items from all pages, optionally filtered.
+            List[Dict]: A list of items from all pages, optionally filtered and limited.
 
         Raises:
             WebexAPIError: If there's an error with the HTTP request or response.
@@ -166,6 +169,12 @@ class WebexClient:
                     items = [item for item in items if filter_func(item)]
 
                 all_items.extend(items)
+
+                # Stop pagination if we've reached the maximum number of items
+                if max_items is not None and len(all_items) >= max_items:
+                    # Truncate the list to the exact number of items requested
+                    all_items = all_items[:max_items]
+                    break
 
                 # Check for Link header for pagination
                 link_header = response.headers.get("Link", "")
@@ -427,7 +436,8 @@ class WebexClient:
         """List messages in a room.
 
         This method retrieves a list of messages from a specified Webex room.
-        It handles pagination automatically to retrieve messages.
+        It handles pagination automatically to retrieve messages, stopping once
+        the requested number of messages has been collected.
         Messages are returned in reverse chronological order (newest first).
 
         Args:
@@ -442,15 +452,14 @@ class WebexClient:
         """
         params = {
             "roomId": room_id,
-            "max": 50,  # Use a fixed page size for API requests
+            "max": min(50, max_results),  # Use a page size that doesn't exceed max_results
         }
 
-        # Use the paginated_get helper method
+        # Use the paginated_get helper method with max_items parameter
         url = f"{self.base_url}/messages"
-        messages = self._paginated_get(url, params)
+        messages = self._paginated_get(url, params, max_items=max_results)
 
-        # Limit the number of messages to max_results
-        return messages[:max_results]
+        return messages
 
     def get_message(self, message_id: str) -> Dict:
         """Get details for a specific message.
