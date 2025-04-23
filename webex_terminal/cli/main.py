@@ -228,7 +228,6 @@ async def room_session(room):
         Returns:
             None
         """
-        print(f"\nMessage callback called with message ID: {message.get('id')}")
         nonlocal last_message_id
 
         # Store the message ID for threading
@@ -237,7 +236,6 @@ async def room_session(room):
 
         # Skip messages from self
         if message.get("personId") == me["id"]:
-            print(f"Skipping message from self (personId: {message.get('personId')})")
             return
 
         # Get sender info
@@ -261,13 +259,11 @@ async def room_session(room):
 
         # noinspection PyBroadException
         try:
-            print(f"Processing message with content type: {content_type}")
             # Yield control back to the event loop before displaying the message
             await asyncio.sleep(0)
 
             # Process the message based on content type
             if content_type == "html":
-                print("Processing HTML content")
                 # For HTML content, we need to convert it to plain text
                 # Use our custom HTML parser to extract text from HTML content
                 parser = HTMLToTextParser()
@@ -277,9 +273,7 @@ async def room_session(room):
                 # Escape any HTML in the plain text to prevent injection when using HTML class
                 html_content = html.escape(plain_text)
                 render_as_html = False
-                print(f"Processed HTML content: {html_content[:50]}...")
             elif content_type == "markdown":
-                print("Processing Markdown content")
                 # Escape any HTML in the original message to prevent injection
                 safe_text = html.escape(message_text)
                 # Convert markdown to HTML
@@ -289,13 +283,10 @@ async def room_session(room):
                 if html_content.startswith("<p>") and html_content.endswith("</p>"):
                     html_content = html_content[3:-4]
                 render_as_html = False
-                print(f"Processed Markdown content: {html_content[:50]}...")
             else:
-                print("Processing plain text content")
                 # If no html or markdown, just escape the text
                 html_content = html.escape(message_text)
                 render_as_html = False
-                print(f"Processed plain text content: {html_content[:50]}...")
 
             # Check for file attachments
             file_info = ""
@@ -344,13 +335,9 @@ async def room_session(room):
                         f"\n\n[Debug] Message payload: {json.dumps(message, indent=2)}"
                     )
 
-            print("About to display message")
-
             # Force a flush of stdout before patching
             sys.stdout.flush()
 
-            # Use a separate patch_stdout context to ensure clean output
-            print("DEBUG: About to enter patch_stdout context")
             with patch_stdout(raw=True):
                 # Load config to check if sound is enabled
                 config = load_config()
@@ -358,46 +345,27 @@ async def room_session(room):
                 # Play bell sound if enabled
                 if config.get("sound_enabled", True):
                     print("\a", end="", flush=True)  # \a is the ASCII bell character
-                    print("DEBUG: Bell sound played")
-
-                # Format message with sender name as prefix, keeping the styling
-                # For all content types, wrap in message tags
-                print("Displaying message with print_formatted_text")
 
                 # Print a newline first to ensure clean formatting
                 print("\n", end="", flush=True)
 
-                # Use prompt_toolkit's print_formatted_text for better integration with the prompt
-                print(
-                    f"DEBUG: About to display message from {sender_name} with content length {len(html_content)}"
-                )
-
                 # Use a more direct approach that's guaranteed to be visible
                 print(f"\n\n>>> {sender_name}: {html_content}\n", flush=True)
 
-                print("DEBUG: Message displayed with direct print")
-
                 # Force another flush to ensure the message is displayed
                 sys.stdout.flush()
-                print("DEBUG: stdout flushed")
 
                 # Redisplay the prompt to maintain user experience
                 room_display = (
                     "no room joined" if room["id"] == "dummy" else room["title"]
                 )
                 print(f"\n{me['displayName']}@{room_display}> ", end="", flush=True)
-                print("DEBUG: Prompt redisplayed")
-
-                print("Message display completed", flush=True)
 
             # Yield control back to the event loop after displaying the message
             await asyncio.sleep(0)
         except Exception as e:
             # Print the exception for debugging
             print(f"\nError processing message: {e}")
-            import traceback
-
-            print(f"Exception traceback: {traceback.format_exc()}")
             pass
 
     # Only create websocket client if we're joining a real room
